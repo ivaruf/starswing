@@ -13,6 +13,24 @@ the way is worth five points a piece; a metre is worth one.
 
 Hold is a finger or the mouse anywhere on the sky, or Space / ↑.
 
+## Together
+
+Up to four comets share one sky, one camera and one score. A comet that is
+lost while a friend is still up comes back a second later, circling the star
+a survivor is holding (or the next one they catch), and waits there until its
+own player presses. The run ends when nobody is left. Whoever falls behind
+the camera comes back the same way, so everyone stays in one picture.
+
+- **One screen**: pick 2, 3 or 4 on the start card's Players row. The glass
+  is cut into one upright strip per player, left to right, and a finger in a
+  strip is that player's button. On a keyboard: Q and P for two, Q B P for
+  three, Q C M P for four.
+- **Online**: one comet per device, over WebRTC with no server of ours
+  (`docs/P2P.md`). The host makes a room and reads out three pictures; guests
+  tap them on a keypad. A guest that arrives after Play drops into the run.
+
+The best score is the solo game's alone.
+
 ## Running it
 
 Serve the hub directory and open `/starswing/`:
@@ -31,7 +49,9 @@ hidden, which is expected.
 | --- | --- |
 | `js/sim.js` | the whole game, no DOM: physics, the sky's generation, the bot |
 | `js/render.js` | the canvas: sky, glow, sparks, HUD; picks the field for the screen |
-| `js/main.js` | the loop, the one button, the states, Escape, the best score |
+| `js/main.js` | the loop, the buttons (one, or one per strip), the states, Escape, the best score |
+| `js/lobby.js` | the Online card: create or join a room, the picture keypad, the seats |
+| `js/net/` | protocol (the frame on the wire), host and its worker, guest; `codes`, `rendezvous` and `webrtc` are geometry_pong's unchanged |
 | `js/ui.js` | cards, the corner's menu and mute, the way back to the arcade |
 | `js/audio.js` | two buses, mute, the composed cues and the loop |
 | `js/i18n.js` | bokmål and English |
@@ -44,9 +64,13 @@ geometry_pong's, cut to what this game has.
 ## Checks
 
 ```sh
-node tools/sim-smoke.mjs     # the bot climbs a tall sky and a wide one; invariants hold
+node tools/sim-smoke.mjs     # the bot climbs; a lost comet rejoins a friend; a frame survives the wire
 python3 tools/make-icons.py  # after changing the motif
 ```
+
+`tools/net-check.html`, opened through the hub's server, puts a host and a
+guest side by side and drives them through a room and a run. It is something
+to look at, not an assertion.
 
 ## Sound
 

@@ -3,13 +3,21 @@
  * the way back to the arcade. Decides what is showing and what the words
  * say; main.js decides when.
  *
- *   start  the wordmark, Play, the update button, and the way back to the
- *          arcade last
+ *   start  the wordmark, the Players row (1 to 4 on this screen), Play,
+ *          Online, the update button, and the way back to the arcade last
  *   menu   the one panel behind the three-bar plate. In a run it is the
  *          Pause face (Resume, Restart, Main menu); anywhere else it is the
  *          Settings face (no Resume, a Back). Both carry MUSIC and EFFECTS,
  *          the language row and the way back to the arcade, last.
  *   over   the points, what they were made of, then Play again / Main menu
+ *   online the lobby card; js/lobby.js fills it, this file only shows it
+ *
+ * ONLINE THE MENU DOES NOT PAUSE (hub §2): the run belongs to the whole
+ * room. showPause({ live: true }) gives the panel its live face — "Menu", a
+ * line saying the sky carries on — and the button stays live behind it.
+ * `canRestart` is false for a guest, whose Restart would do nothing; the
+ * over card's Play again likewise, and online its way back is "Back", to
+ * the room.
  *
  * Menu words are the hub's shared glossary (§2).
  *
@@ -25,8 +33,8 @@ import { t, setLang, paintStatic } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 
-export function createUI({ onPlay, onResume, onRestart, onMainMenu, onMenu }) {
-  const cards = { start: $('start'), menu: $('menu'), over: $('over') };
+export function createUI({ onPlay, onOnline, onResume, onRestart, onMainMenu, onMenu }) {
+  const cards = { start: $('start'), menu: $('menu'), over: $('over'), online: $('online') };
   let face = 'pause';
   let settingsFrom = 'start'; // the card the Settings face's Back returns to
 
@@ -43,7 +51,24 @@ export function createUI({ onPlay, onResume, onRestart, onMainMenu, onMenu }) {
     return null;
   }
 
-  $('play').addEventListener('click', onPlay);
+  // Players on this screen: alternatives, one size each, for the visit only.
+  let players = 1;
+  for (const n of [1, 2, 3, 4]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'seg-btn';
+    b.id = `players-${n}`;
+    b.textContent = String(n);
+    b.setAttribute('aria-pressed', String(n === players));
+    b.addEventListener('click', () => {
+      players = n;
+      for (const x of $('players').children) x.setAttribute('aria-pressed', String(x === b));
+    });
+    $('players').appendChild(b);
+  }
+
+  $('play').addEventListener('click', () => onPlay(players));
+  $('online-btn').addEventListener('click', onOnline);
   $('menu-resume').addEventListener('click', onResume);
   $('menu-restart').addEventListener('click', onRestart);
   $('menu-main').addEventListener('click', onMainMenu);
@@ -52,16 +77,20 @@ export function createUI({ onPlay, onResume, onRestart, onMainMenu, onMenu }) {
   $('over-main').addEventListener('click', onMainMenu);
   $('menu-btn').addEventListener('click', onMenu);
 
-  // face: 'pause' (a stopped run) or 'settings' (outside a run).
-  function setFace(next) {
+  // face: 'pause' (a stopped run), 'live' (an online run that carries on)
+  // or 'settings' (outside a run).
+  function setFace(next, canRestart = true) {
     face = next;
     const inGame = face !== 'settings';
     const title = $('menu-title');
-    title.dataset.i18n = inGame ? 'paused' : 'settings';
+    title.dataset.i18n = face === 'live' ? 'live' : inGame ? 'paused' : 'settings';
     title.textContent = t(title.dataset.i18n);
-    $('menu-tag').hidden = !inGame;
+    const tag = $('menu-tag');
+    tag.dataset.i18n = face === 'live' ? 'live.tag' : 'pause.tag';
+    tag.textContent = t(tag.dataset.i18n);
+    tag.hidden = !inGame;
     $('menu-resume').hidden = !inGame;
-    $('menu-restart').hidden = !inGame;
+    $('menu-restart').hidden = !inGame || !canRestart;
     $('menu-main').hidden = !inGame;
     $('menu-back').hidden = inGame;
   }
@@ -100,7 +129,11 @@ export function createUI({ onPlay, onResume, onRestart, onMainMenu, onMenu }) {
     cards.over.classList.toggle('record', over.record);
     $('over-title').textContent = t('over.points', over.points);
     $('over-record').hidden = !over.record;
-    $('over-score').textContent = t('over.detail', over.metres, over.dust, over.best);
+    $('over-score').textContent = over.team ? t('over.team', over.metres, over.dust) : t('over.detail', over.metres, over.dust, over.best);
+    $('over-again').hidden = !over.canAgain;
+    const main = $('over-main');
+    main.dataset.i18n = over.online ? 'back' : 'mainMenu';
+    main.textContent = t(main.dataset.i18n);
   }
 
   // ---- language ----
@@ -169,10 +202,11 @@ export function createUI({ onPlay, onResume, onRestart, onMainMenu, onMenu }) {
     exitShown: () => exitApi != null && !exitRefused,
     showStart: () => show('start'),
     hideCards: () => show(null),
-    showPause() {
-      setFace('pause');
+    showPause({ live = false, canRestart = true } = {}) {
+      setFace(live ? 'live' : 'pause', canRestart);
       show('menu');
     },
+    showOnline: () => show('online'),
     showSettings() {
       settingsFrom = current(); // may be null: over a sky with no card
       setFace('settings');
@@ -180,7 +214,7 @@ export function createUI({ onPlay, onResume, onRestart, onMainMenu, onMenu }) {
     },
     inSettings: () => !cards.menu.hidden && face === 'settings',
     settingsBack: () => show(settingsFrom),
-    /* { points, metres, dust, best, record } */
+    /* { points, metres, dust, best, record, team, online, canAgain } */
     showOver(result) {
       over = result;
       paintOver();

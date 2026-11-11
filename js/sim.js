@@ -24,6 +24,18 @@
  * it live; letting go of THAT press is the first fling. It is what stops a
  * resume from flinging a comet whose button was let go while paused.
  *
+ * TOGETHER. A sky holds up to SEATS comets, one per player, and they share
+ * it: one camera on whoever is highest, one score. A comet that is lost while
+ * a friend is still up is not out of the run: a second later it is back,
+ * circling the star a survivor is holding (or the next one they catch),
+ * PARKED until its own player presses. The run ends when nobody is left. A
+ * seat taken mid-run (online, `seat`) comes in the same way, and so does the
+ * laggard the camera leaves behind, which is what keeps everyone in one
+ * picture. With one comet every rule here is the solo game it was.
+ *
+ * g.status is 'parked' while no comet is in play (no creep), 'play', 'over'.
+ * A comet's own status is 'none' (empty seat), 'parked', 'play' or 'out'.
+ *
  * Math.random throughout: no run needs to replay (hub §10).
  *
  * Checked by tools/sim-smoke.mjs, which flies `autopilot` — the same bot
@@ -32,6 +44,7 @@
 
 export const TICK = 1 / 60;
 export const REACH = 240; // how far a hold can catch a star from
+export const SEATS = 4;
 export const ZONE = 2500; // units per zone: 250 m, a new colour and a harder sky
 const G = 520; // gravity in free flight
 const SWING = 460; // the speed a swing settles at
@@ -41,15 +54,27 @@ const WALL = 16;
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
-export function createGame({ w = 600, view = 900 } = {}) {
+const alive = (c) => c.status === 'parked' || c.status === 'play';
+
+/* `seats`: which seats hold a comet, e.g. [true] solo, [true, true] for two. */
+export function createGame({ w = 600, view = 900, seats = [true] } = {}) {
   const first = { x: w / 2, y: view * 0.36, bx: w / 2, amp: 0, ph: 0, dark: false, lit: true };
+  const n = seats.filter(Boolean).length || 1;
+  let k = 0;
   const g = {
     w, view,
     t: 0,
     status: 'parked', // parked | play | over
-    comet: { x: first.x, y: first.y - 90, vx: SWING, vy: 0 },
-    tether: first, last: null,
-    r: 90, rT: 90, ang: -Math.PI / 2, dir: 1, speed: SWING,
+    // Everyone starts on the first star, spread evenly round its orbit.
+    comets: seats.map((on) => {
+      const ang = -Math.PI / 2 + (on ? (k++ * 2 * Math.PI) / n : 0);
+      return {
+        status: on ? 'parked' : 'none',
+        x: first.x + 90 * Math.cos(ang), y: first.y + 90 * Math.sin(ang), vx: 0, vy: 0,
+        tether: on ? first : null, last: null,
+        r: 90, rT: 90, ang, dir: 1, speed: SWING, chain: 0, wait: 0,
+      };
+    }),
     stars: [first], // bright and dark together, in rising order
     dust: [],
     genY: first.y,
@@ -57,12 +82,12 @@ export function createGame({ w = 600, view = 900 } = {}) {
     lanes: w > 850 ? [{ x: first.x, lo: 70, hi: w / 2 - 40 }, { x: first.x, lo: w / 2 + 40, hi: w - 70 }] : [{ x: first.x, lo: 70, hi: w - 70 }],
     camY: 0, // the height at the bottom of the screen
     base: first.y + 90, top: 0, zone: 0,
-    dustN: 0, grabs: 0, chain: 0, combo: 0, dustT: -9,
+    dustN: 0, grabs: 0, combo: 0, dustT: -9,
     events: [], // drained by main.js every frame
   };
   grow(g);
   // No dust inside the first swing: circling the first star scores nothing.
-  g.dust = g.dust.filter((d) => d.y > g.base + 20);
+  g.dust = g.dust.filter((d) => d.y > g.base + 35); // 30 is the reach of a pick-up
   return g;
 }
 
@@ -103,114 +128,182 @@ function grow(g) {
   }
 }
 
-/* The star a hold would catch right now, or null. See the header. */
-export function target(g) {
-  const c = g.comet;
+/* The star a hold would catch for comet `c` right now, or null. See the header. */
+export function target(g, c = g.comets[0]) {
   let best = null, bd = REACH * REACH;
   let old = false;
   for (const s of g.stars) {
     if (s.dark) continue;
     const d = (s.x - c.x) * (s.x - c.x) + (s.y - c.y) * (s.y - c.y);
     if (d > REACH * REACH) continue;
-    if (s === g.last) { old = true; continue; }
+    if (s === c.last) { old = true; continue; }
     if (d < bd) { bd = d; best = s; }
   }
-  if (!best && old && c.vy <= 0) best = g.last;
+  if (!best && old && c.vy <= 0) best = c.last;
   return best;
 }
 
-function die(g) {
-  g.status = 'over';
-  g.tether = null;
-  g.events.push({ type: 'over', x: g.comet.x, y: g.comet.y });
+/* Comet `who` is lost: out for a moment if a friend is still up, else the end. */
+function die(g, c, who) {
+  c.status = 'out';
+  c.tether = null;
+  c.wait = 1;
+  settle(g, { who, x: c.x, y: c.y });
+}
+
+function settle(g, e) {
+  if (g.status === 'over') return;
+  const left = g.comets.some(alive);
+  if (!left) g.status = 'over';
+  g.events.push({ type: left ? 'out' : 'over', ...e });
+}
+
+/* An out comet comes back on the highest star a friend is holding, parked. */
+function rejoin(g, c, who) {
+  let host = null;
+  for (const o of g.comets) {
+    if (alive(o) && o.tether && (!host || o.tether.y > host.tether.y)) host = o;
+  }
+  if (!host) return;
+  const j = g.comets.indexOf(host);
+  c.status = 'parked';
+  c.tether = host.tether;
+  c.last = null;
+  c.r = c.rT = 90;
+  c.dir = host.dir;
+  c.speed = SWING;
+  c.chain = 0;
+  // A quarter turn per seat apart, so two that come back together do not overlap.
+  c.ang = host.ang + ((who - j + SEATS) % SEATS) * (Math.PI / 2);
+  g.events.push({ type: 'join', who, x: c.tether.x, y: c.tether.y });
+}
+
+/* A seat taken or left mid-run (online). A new comet arrives like a lost one. */
+export function seat(g, who, on) {
+  const c = g.comets[who];
+  if (!c || on === (c.status !== 'none')) return;
+  c.tether = null;
+  if (on) {
+    c.status = 'out';
+    c.wait = 0.5;
+  } else {
+    const was = alive(c);
+    c.status = 'none';
+    if (was) settle(g, { who, x: c.x, y: c.y });
+  }
 }
 
 /* Back to circling with nothing at stake, for a resume from the menu. */
 export function park(g) {
-  if (g.status === 'play' && g.tether) g.status = 'parked';
+  for (const c of g.comets) if (c.status === 'play' && c.tether) c.status = 'parked';
 }
 
-export function step(g, dt, hold) {
+/* One tick. `holds[i]` is whether comet i's button is down. */
+export function step(g, dt, holds) {
   g.t += dt;
   for (const s of g.stars) if (s.amp) s.x = s.bx + s.amp * Math.sin(g.t * 0.8 + s.ph);
   if (g.status === 'over') return;
-  if (g.status === 'parked' && hold) g.status = 'play';
-  const c = g.comet;
 
-  if (g.tether && g.status === 'play' && !hold) {
-    g.last = g.tether;
-    g.tether = null;
-    g.events.push({ type: 'release', x: c.x, y: c.y });
-  } else if (!g.tether && hold) {
-    const s = target(g);
-    if (s) {
-      const dx = c.x - s.x, dy = c.y - s.y;
-      g.r = Math.hypot(dx, dy) || 1;
-      g.rT = Math.max(g.r, RMIN);
-      g.ang = Math.atan2(dy, dx);
-      g.dir = dx * c.vy - dy * c.vx >= 0 ? 1 : -1; // keep turning the way it was going
-      g.speed = Math.max(Math.hypot(c.vx, c.vy), 300);
-      const fresh = !s.lit;
-      g.chain = fresh ? g.chain + 1 : 0;
-      if (fresh) g.grabs++;
-      s.lit = true;
-      g.tether = s;
-      g.events.push({ type: 'grab', x: s.x, y: s.y, fresh, chain: g.chain });
+  for (let who = 0; who < g.comets.length; who++) {
+    const c = g.comets[who];
+    const hold = !!holds[who];
+    if (c.status === 'none') continue;
+    if (c.status === 'out') {
+      if ((c.wait -= dt) <= 0) rejoin(g, c, who);
+      continue;
+    }
+    if (c.status === 'parked' && hold) c.status = 'play';
+
+    if (c.tether && c.status === 'play' && !hold) {
+      c.last = c.tether;
+      c.tether = null;
+      g.events.push({ type: 'release', who, x: c.x, y: c.y });
+    } else if (!c.tether && hold) {
+      const s = target(g, c);
+      if (s) {
+        const dx = c.x - s.x, dy = c.y - s.y;
+        c.r = Math.hypot(dx, dy) || 1;
+        c.rT = Math.max(c.r, RMIN);
+        c.ang = Math.atan2(dy, dx);
+        c.dir = dx * c.vy - dy * c.vx >= 0 ? 1 : -1; // keep turning the way it was going
+        c.speed = Math.max(Math.hypot(c.vx, c.vy), 300);
+        const fresh = !s.lit;
+        c.chain = fresh ? c.chain + 1 : 0;
+        if (fresh) g.grabs++;
+        s.lit = true;
+        c.tether = s;
+        g.events.push({ type: 'grab', who, x: s.x, y: s.y, fresh, chain: c.chain });
+      }
+    }
+
+    if (c.tether) {
+      const s = c.tether;
+      c.speed += clamp(SWING - c.speed, -500 * dt, 500 * dt);
+      c.r += clamp(c.rT - c.r, -200 * dt, 200 * dt);
+      c.ang += (c.dir * c.speed * dt) / c.r;
+      const cs = Math.cos(c.ang), sn = Math.sin(c.ang);
+      c.x = s.x + c.r * cs;
+      c.y = s.y + c.r * sn;
+      c.vx = -sn * c.dir * c.speed;
+      c.vy = cs * c.dir * c.speed;
+    } else {
+      c.vy -= G * dt;
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      if (c.x < WALL) { c.x = WALL; c.vx = Math.abs(c.vx) * 0.8; g.events.push({ type: 'wall', who, x: c.x, y: c.y }); }
+      else if (c.x > g.w - WALL) { c.x = g.w - WALL; c.vx = -Math.abs(c.vx) * 0.8; g.events.push({ type: 'wall', who, x: c.x, y: c.y }); }
+    }
+
+    for (const d of g.dust) {
+      if (d.taken || Math.abs(d.y - c.y) > 30 || Math.abs(d.x - c.x) > 30) continue;
+      d.taken = true;
+      g.dustN++;
+      g.combo = g.t - g.dustT < 1.2 ? g.combo + 1 : 0;
+      g.dustT = g.t;
+      g.events.push({ type: 'dust', who, x: d.x, y: d.y, combo: g.combo });
+    }
+    if (c.status === 'play') {
+      let hit = false;
+      for (const s of g.stars) if (s.dark && Math.hypot(s.x - c.x, s.y - c.y) < 30) hit = true;
+      if (hit) {
+        die(g, c, who);
+        if (g.status === 'over') return;
+      }
     }
   }
 
-  if (g.tether) {
-    const s = g.tether;
-    g.speed += clamp(SWING - g.speed, -500 * dt, 500 * dt);
-    g.r += clamp(g.rT - g.r, -200 * dt, 200 * dt);
-    g.ang += (g.dir * g.speed * dt) / g.r;
-    const cs = Math.cos(g.ang), sn = Math.sin(g.ang);
-    c.x = s.x + g.r * cs;
-    c.y = s.y + g.r * sn;
-    c.vx = -sn * g.dir * g.speed;
-    c.vy = cs * g.dir * g.speed;
-  } else {
-    c.vy -= G * dt;
-    c.x += c.vx * dt;
-    c.y += c.vy * dt;
-    if (c.x < WALL) { c.x = WALL; c.vx = Math.abs(c.vx) * 0.8; g.events.push({ type: 'wall', x: c.x, y: c.y }); }
-    else if (c.x > g.w - WALL) { c.x = g.w - WALL; c.vx = -Math.abs(c.vx) * 0.8; g.events.push({ type: 'wall', x: c.x, y: c.y }); }
-  }
-
-  for (const d of g.dust) {
-    if (d.taken || Math.abs(d.y - c.y) > 30 || Math.abs(d.x - c.x) > 30) continue;
-    d.taken = true;
-    g.dustN++;
-    g.combo = g.t - g.dustT < 1.2 ? g.combo + 1 : 0;
-    g.dustT = g.t;
-    g.events.push({ type: 'dust', x: d.x, y: d.y, combo: g.combo });
-  }
-  if (g.status === 'play') {
-    for (const s of g.stars) {
-      if (s.dark && Math.hypot(s.x - c.x, s.y - c.y) < 30) return die(g);
+  // The camera and the height belong to whoever is highest.
+  let lead = null;
+  for (const c of g.comets) if (alive(c) && (!lead || c.y > lead.y)) lead = c;
+  g.status = g.comets.some((c) => c.status === 'play') ? 'play' : 'parked';
+  if (lead) {
+    if (lead.y > g.top) {
+      g.top = lead.y;
+      const z = Math.floor((g.top - g.base) / ZONE);
+      if (z > g.zone) {
+        g.zone = z;
+        g.events.push({ type: 'zone', n: z, x: lead.x, y: lead.y });
+      }
     }
+    // The comet rides this far above the bottom edge: room to fall and be caught.
+    const want = lead.y - Math.min(g.view * 0.45, 420);
+    if (want > g.camY) g.camY += (want - g.camY) * Math.min(1, 6 * dt);
   }
-
-  if (c.y > g.top) {
-    g.top = c.y;
-    const z = Math.floor((g.top - g.base) / ZONE);
-    if (z > g.zone) {
-      g.zone = z;
-      g.events.push({ type: 'zone', n: z, x: c.x, y: c.y });
+  if (g.status === 'play') g.camY += (10 + 5 * Math.min(g.zone, 6)) * dt; // the sky creeps: climb, or be left behind
+  // Lost: out of the bottom in free flight, or holding a star that has
+  // itself gone under. A swing that only dips below the edge is safe. With
+  // nobody in play the camera is still, so a parked comet is never lost alone.
+  for (let who = 0; who < g.comets.length; who++) {
+    const c = g.comets[who];
+    if (!alive(c)) continue;
+    if (c.tether ? c.tether.y < g.camY - 20 : c.y < g.camY - 30) {
+      die(g, c, who);
+      if (g.status === 'over') return;
     }
-  }
-  // The comet rides this far above the bottom edge: room to fall and be caught.
-  const want = c.y - Math.min(g.view * 0.45, 420);
-  if (want > g.camY) g.camY += (want - g.camY) * Math.min(1, 6 * dt);
-  if (g.status === 'play') {
-    g.camY += (10 + 5 * Math.min(g.zone, 6)) * dt; // the sky creeps: climb, or be left behind
-    // Lost: out of the bottom in free flight, or holding a star that has
-    // itself gone under. A swing that only dips below the edge is safe.
-    if (g.tether ? g.tether.y < g.camY - 20 : c.y < g.camY - 30) return die(g);
   }
 
   // Forget what has scrolled away. A tethered star is never that far down.
-  while (g.stars.length && g.stars[0].y < g.camY - 320 && g.stars[0] !== g.tether) g.stars.shift();
+  while (g.stars.length && g.stars[0].y < g.camY - 320 && !g.comets.some((c) => c.tether === g.stars[0])) g.stars.shift();
   while (g.dust.length && g.dust[0].y < g.camY - 60) g.dust.shift();
   grow(g);
 }
@@ -222,14 +315,14 @@ export function step(g, dt, hold) {
  * is what the start screen wants to show.
  */
 export function autopilot(g) {
-  const c = g.comet;
-  if (g.status === 'parked') return true;
-  if (!g.tether) return target(g) !== null;
+  const c = g.comets[0];
+  if (c.status === 'parked') return true;
+  if (!c.tether) return target(g, c) !== null;
   if (c.vy <= 0) return true;
   let aim = null, ad = Infinity;
   for (const s of g.stars) {
-    if (s.dark || s === g.tether || s.y < g.tether.y + 30) continue;
-    const d = Math.hypot(s.x - g.tether.x, s.y - g.tether.y);
+    if (s.dark || s === c.tether || s.y < c.tether.y + 30) continue;
+    const d = Math.hypot(s.x - c.tether.x, s.y - c.tether.y);
     if (d < ad) { ad = d; aim = s; }
   }
   if (!aim) return true;

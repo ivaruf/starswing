@@ -317,6 +317,9 @@ export const audio = {
     else if (e.type === 'dust') play('dust', rate(e.combo));
     else if (e.type === 'release') play('release');
     else if (e.type === 'wall') play('wall');
+    // With friends: a comet lost falls like the end does, one back is a catch.
+    else if (e.type === 'out') play('over');
+    else if (e.type === 'join') play('grab');
     else if (e.type === 'zone') {
       play('zone');
       duckMusic(1.2);

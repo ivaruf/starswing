@@ -13,6 +13,15 @@
  * keeps the field it started with, so turning the device mid-run letterboxes
  * the same sky rather than changing the game under the player.
  *
+ * TOGETHER (sim.js header). With more than one comet in the sky each wears
+ * its seat's colour (PC), in its glow, beam, tail and sparks; alone, the
+ * comet wears the zone's colour as it always did. On one shared screen
+ * (`o.strips`) each player's strip of the glass carries a bar of their colour
+ * along the bottom, and "Hold here" while their comet is parked.
+ *
+ * `g` may be the sim's own game or a frame decoded off the wire
+ * (js/net/protocol.js unpackFrame): draw() reads only what both carry.
+ *
  * Nothing is allocated in draw(): sparks, rings and the tail live in typed
  * arrays written round-robin (hub §10). devicePixelRatio capped at 2.
  */
@@ -24,6 +33,9 @@ import { t } from './i18n.js';
 const ZONES = [[90, 200, 255], [170, 130, 255], [255, 110, 190], [255, 190, 90], [110, 255, 170]];
 const css = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 const ACCENT = ZONES.map((c) => css(c));
+// A seat's colour, as an index into ZONES: blue, pink, yellow, green.
+export const PC = [0, 2, 3, 4];
+export const SEAT_CSS = PC.map((i) => ACCENT[i]);
 const GOLD = [255, 214, 120];
 const RED = [255, 70, 90];
 const FONT = 'ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -122,9 +134,10 @@ export function createRenderer(canvas) {
   const RN = 10; // rings: x, y, age, span, colour
   const rg = new Float32Array(RN * 5).fill(9);
   let rgI = 0;
-  const TN = 44; // the tail, in world units
-  const tail = new Float32Array(TN * 2);
-  let tailI = 0, tailN = 0;
+  const TN = 44; // the tails, in world units: one per seat
+  const tail = new Float32Array(4 * TN * 2);
+  const tailI = new Uint8Array(4), tailN = new Uint8Array(4);
+  const tgt = [null, null, null, null]; // the star each comet's hold would catch
   let shake = 0, banner = 0, bannerN = 0, zoneFade = 1, zonePrev = 0, zoneNow = 0;
 
   function resize() {
@@ -157,7 +170,7 @@ export function createRenderer(canvas) {
   function reset() {
     sp.fill(0);
     rg.fill(9);
-    tailN = 0;
+    tailN.fill(0);
     shake = banner = 0;
     zoneFade = 1;
     zonePrev = zoneNow = 0;
@@ -165,7 +178,8 @@ export function createRenderer(canvas) {
 
   /* One sim event, as light. */
   function event(e, g) {
-    const z = g.zone % ZONES.length;
+    // Sparks in the comet's own colour when there are several, else the zone's.
+    const z = g.comets.length > 1 && e.who != null ? PC[e.who] : g.zone % ZONES.length;
     if (e.type === 'grab') {
       ring(e.x, e.y, 0.5, z);
       spark(e.x, e.y, e.fresh ? 220 : 90, e.fresh ? 16 : 5, z);
@@ -173,13 +187,17 @@ export function createRenderer(canvas) {
     else if (e.type === 'dust') spark(e.x, e.y, 150, 7, -1, 0.5);
     else if (e.type === 'wall') spark(e.x, e.y, 160, 6, z, 0.4);
     else if (e.type === 'zone') {
-      zonePrev = zoneNow;
-      zoneNow = z;
-      zoneFade = 0;
       banner = 2.4;
       bannerN = e.n * (ZONE / 10);
       ring(e.x, e.y, 1.4, z);
       spark(e.x, e.y, 420, 40, z, 1.1);
+    } else if (e.type === 'join') {
+      ring(e.x, e.y, 0.7, z);
+      spark(e.x, e.y, 200, 14, z, 0.6);
+    } else if (e.type === 'out') {
+      shake = 0.2;
+      ring(e.x, e.y, 0.6, -2);
+      spark(e.x, e.y, 380, 40, z, 1);
     } else if (e.type === 'over') {
       shake = 0.5;
       ring(e.x, e.y, 0.9, -2);
@@ -198,9 +216,15 @@ export function createRenderer(canvas) {
     const oy = H - (H - g.view * s) / 2;
     const X = (x) => ox + x * s;
     const Y = (y) => oy - (y - g.camY) * s;
-    const c = g.comet;
-    const acc = glow[zoneNow];
     const alive = g.status !== 'over';
+    const multi = g.comets.length > 1;
+    // The sky's colour follows the game's zone, not the event: a guest that
+    // joins at 800 m never heard the three zone events before it.
+    if (g.zone % ZONES.length !== zoneNow) {
+      zonePrev = zoneNow;
+      zoneNow = g.zone % ZONES.length;
+      zoneFade = 0;
+    }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (shake > 0) {
@@ -242,7 +266,10 @@ export function createRenderer(canvas) {
     }
 
     // Stars.
-    const tgt = alive && !g.tether && !o.attract ? target(g) : null;
+    for (let i = 0; i < 4; i++) {
+      const c = g.comets[i];
+      tgt[i] = c && alive && c.status === 'play' && !c.tether && !o.attract && (o.mine < 0 || o.mine === i) ? target(g, c) : null;
+    }
     for (const st of g.stars) {
       const x = X(st.x), y = Y(st.y);
       if (y < -80 || y > H + 80) continue;
@@ -262,13 +289,16 @@ export function createRenderer(canvas) {
         ctx.globalCompositeOperation = 'lighter';
         continue;
       }
-      const held = st === g.tether;
+      let held = false;
+      for (const c of g.comets) if (c.tether === st) held = true;
       ctx.globalAlpha = held ? 1 : st.lit ? 0.55 : 0.85;
       sprite(st.lit ? starLit[zoneNow] : star, x, y, (held ? 74 : 52) * s * pulse);
-      if (st === tgt) {
+      for (let i = 0; i < 4; i++) {
+        if (st !== tgt[i]) continue;
+        const c = g.comets[i];
         // The star a hold would catch: a turning dashed ring and a faint line.
         ctx.globalAlpha = 0.8;
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = multi ? ACCENT[PC[i]] : '#ffffff';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([6, 7]);
         ctx.lineDashOffset = -time * 30;
@@ -284,41 +314,55 @@ export function createRenderer(canvas) {
       }
     }
 
-    // The beam.
-    if (g.tether) {
-      ctx.strokeStyle = ACCENT[zoneNow];
-      ctx.lineCap = 'round';
-      for (let pass = 0; pass < 2; pass++) {
-        ctx.globalAlpha = pass ? 0.9 : 0.25;
-        ctx.lineWidth = pass ? 2 : 8;
-        ctx.beginPath();
-        ctx.moveTo(X(g.tether.x), Y(g.tether.y));
-        ctx.lineTo(X(c.x), Y(c.y));
-        ctx.stroke();
+    // Each comet: its beam, its tail (the last TN places it was, widest and
+    // brightest at the head), then itself.
+    for (let i = 0; i < g.comets.length; i++) {
+      const c = g.comets[i];
+      if (!alive || (c.status !== 'parked' && c.status !== 'play')) {
+        tailN[i] = 0;
+        continue;
       }
-    }
-
-    // The tail: the last TN places the comet was, widest and brightest at the head.
-    if (alive) {
-      tail[tailI * 2] = c.x;
-      tail[tailI * 2 + 1] = c.y;
-      tailI = (tailI + 1) % TN;
-      if (tailN < TN) tailN++;
-      ctx.strokeStyle = ACCENT[zoneNow];
+      const k = multi ? PC[i] : zoneNow;
+      ctx.strokeStyle = ACCENT[k];
+      if (c.tether) {
+        ctx.lineCap = 'round';
+        for (let pass = 0; pass < 2; pass++) {
+          ctx.globalAlpha = pass ? 0.9 : 0.25;
+          ctx.lineWidth = pass ? 2 : 8;
+          ctx.beginPath();
+          ctx.moveTo(X(c.tether.x), Y(c.tether.y));
+          ctx.lineTo(X(c.x), Y(c.y));
+          ctx.stroke();
+        }
+      }
+      const T = i * TN * 2;
+      tail[T + tailI[i] * 2] = c.x;
+      tail[T + tailI[i] * 2 + 1] = c.y;
+      tailI[i] = (tailI[i] + 1) % TN;
+      if (tailN[i] < TN) tailN[i]++;
       ctx.lineCap = 'butt'; // round caps overlap additively and bead the tail
-      for (let i = 1; i < tailN; i++) {
-        const a = (tailI - i + TN) % TN, b = (tailI - i - 1 + TN) % TN;
-        const f = 1 - i / tailN;
+      for (let j = 1; j < tailN[i]; j++) {
+        const a = (tailI[i] - j + TN) % TN, b = (tailI[i] - j - 1 + TN) % TN;
+        const f = 1 - j / tailN[i];
         ctx.globalAlpha = f * 0.8;
         ctx.lineWidth = (1 + 9 * f) * s;
         ctx.beginPath();
-        ctx.moveTo(X(tail[a * 2]), Y(tail[a * 2 + 1]));
-        ctx.lineTo(X(tail[b * 2]), Y(tail[b * 2 + 1]));
+        ctx.moveTo(X(tail[T + a * 2]), Y(tail[T + a * 2 + 1]));
+        ctx.lineTo(X(tail[T + b * 2]), Y(tail[T + b * 2 + 1]));
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      sprite(acc, X(c.x), Y(c.y), 34 * s);
+      sprite(glow[k], X(c.x), Y(c.y), 34 * s);
       sprite(glowWhite, X(c.x), Y(c.y), 16 * s);
+      // Online, several comets may circle one star: a ring says which is yours.
+      if (i === o.mine && c.status === 'parked') {
+        ctx.globalAlpha = 0.9;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(X(c.x), Y(c.y), 20 * s, 0, 6.3);
+        ctx.stroke();
+      }
     }
 
     // Sparks and rings.
@@ -348,8 +392,12 @@ export function createRenderer(canvas) {
     }
 
     // The bottom edge glows as it closes on a comet in free flight.
-    if (alive && !o.attract && g.status === 'play') {
-      const near = 1 - (c.y - g.camY) / 260;
+    if (alive && !o.attract) {
+      let near = 0;
+      for (let i = 0; i < g.comets.length; i++) {
+        const c = g.comets[i];
+        if (c.status === 'play' && (o.mine < 0 || o.mine === i)) near = Math.max(near, 1 - (c.y - g.camY) / 260);
+      }
       if (near > 0) {
         ctx.globalAlpha = Math.min(1, near);
         ctx.fillStyle = danger;
@@ -382,12 +430,38 @@ export function createRenderer(canvas) {
       ctx.fillText(`${bannerN} m`, W / 2, H * 0.24);
       ctx.globalAlpha = 1;
     }
-    // What the one button does, until two stars have been caught.
-    if (alive && g.grabs < 2) {
+    const bob = (0.5 + 0.5 * Math.sin(time * 3)) * 5;
+    if (o.strips) {
+      // One shared screen: each strip of the glass is one player's button.
+      const sw = W / o.strips;
+      for (let i = 0; i < o.strips; i++) {
+        const c = g.comets[i];
+        ctx.fillStyle = ACCENT[PC[i]];
+        ctx.globalAlpha = 0.7;
+        ctx.fillRect(i * sw + 6, H - 5, sw - 12, 3);
+        if (!alive || c.status !== 'parked') continue;
+        ctx.globalAlpha = 1;
+        ctx.font = `700 ${sw < 130 ? 14 : 18}px ${FONT}`;
+        ctx.fillText(t('hint.strip'), (i + 0.5) * sw, H - 64 - bob);
+        if (o.keys) {
+          ctx.font = `600 13px ${FONT}`;
+          ctx.fillText(o.keys[i], (i + 0.5) * sw, H - 40 - bob);
+        }
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+    // What the one button does, until two stars have been caught; and, with
+    // friends, whenever this comet is waiting or gone.
+    const c = g.comets[o.mine < 0 ? 0 : o.mine];
+    let key = null;
+    if (!alive || !c) key = null;
+    else if (c.status === 'out') key = 'hint.out';
+    else if (g.grabs < 2 || (multi && c.status === 'parked')) key = c.status === 'parked' ? 'hint.hold' : c.tether ? 'hint.release' : 'hint.grab';
+    if (key) {
       ctx.font = `700 ${W < 500 ? 17 : 20}px ${FONT}`;
       ctx.fillStyle = 'rgba(238,242,255,0.92)';
-      const key = g.status === 'parked' ? 'hint.hold' : g.tether ? 'hint.release' : 'hint.grab';
-      ctx.fillText(t(key), W / 2, H - 64 - (0.5 + 0.5 * Math.sin(time * 3)) * 5);
+      ctx.fillText(t(key), W / 2, H - 64 - bob);
     }
   }
 

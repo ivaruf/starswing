@@ -1,0 +1,72 @@
+<!doctype html>
+<!--
+  tools/net-check.html — two Starswings side by side, one hosting and one
+  joining, driven by this page. Open it through the hub's server:
+
+    http://localhost:7777/starswing/tools/net-check.html
+
+  The left frame makes a room, the right taps the room's three pictures and
+  joins, the left presses Play, and then the guest's button is pressed and
+  let go a few times, and last the host's. It passes when both skies show the same two comets
+  (blue the host's, pink the guest's) and the log under them ends in "in the
+  same sky". It is a look, not an assertion: the frames are real pages and
+  the path between them is the real one (the PeerJS broker when online, else
+  BroadcastChannel), which is the point. Not shipped: sw.js does not list it.
+
+  For a headless screenshot add ?hang: an image that never loads keeps the
+  load event from firing, so Chrome's --timeout decides when the picture is
+  taken (the trick tools/review/driver.html uses).
+-->
+<meta charset="utf-8" />
+<title>Starswing net check</title>
+<style>
+  body { margin: 0; background: #111; color: #9f9; font: 13px ui-monospace, monospace; }
+  iframe { width: 420px; height: 560px; border: 0; margin: 4px; }
+  pre { margin: 4px 8px; }
+</style>
+<iframe id="a" src="../"></iframe><iframe id="b" src="../"></iframe>
+<pre id="log"></pre>
+<script>
+  if (location.search === '?hang') document.body.appendChild(new Image()).src = 'http://10.255.255.1/hang.png';
+  const log = (s) => (document.getElementById('log').textContent += s + '\n');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const A = document.getElementById('a'), B = document.getElementById('b');
+  const $ = (f, sel) => f.contentDocument.querySelector(sel);
+  async function until(what, test, ms = 20000) {
+    for (let t = 0; t < ms; t += 200) {
+      if (test()) return log('ok   ' + what);
+      await sleep(200);
+    }
+    log('FAIL ' + what);
+    throw new Error(what);
+  }
+  const press = (f, type) => $(f, '#view').dispatchEvent(new f.contentWindow.PointerEvent(type, { pointerId: 1, bubbles: true, clientX: 50, clientY: 300 }));
+  (async () => {
+    await until('both pages up, sting over', () => $(A, '#intro') === null && $(B, '#intro') === null && $(A, '#online-btn') && $(B, '#online-btn'));
+    await sleep(500);
+    $(A, '#online-btn').click();
+    $(A, '#online-host').click();
+    await until('host has a room', () => !$(A, '#online-room').hidden);
+    const icons = [...A.contentDocument.querySelectorAll('#room-code .code-slot')].map((s) => s.textContent);
+    log('code ' + icons.join(' ') + '  ' + $(A, '#online-status').textContent);
+    $(B, '#online-btn').click();
+    $(B, '#online-join').click();
+    for (const icon of icons) [...B.contentDocument.querySelectorAll('.pad-key')].find((k) => k.textContent === icon).click();
+    $(B, '#code-go').click();
+    await until('guest is in the room', () => !$(B, '#online-room').hidden);
+    await until('host sees the guest', () => A.contentDocument.querySelectorAll('#room-seats .seat:not(.bot)').length === 2);
+    $(A, '#room-start').click();
+    await until('both skies are up', () => $(A, '#online').hidden && $(B, '#online').hidden);
+    // The guest alone presses and lets go a few times while the host stays
+    // parked: its comet flies, is lost and comes back on the host's star.
+    // Then the host flies too, and with nobody left holding, the run ends.
+    for (let i = 0; i < 8; i++) {
+      const f = i < 6 ? B : A;
+      press(f, 'pointerdown');
+      await sleep(700);
+      press(f, 'pointerup');
+      await sleep(900);
+    }
+    log($(A, '#crash').hidden && $(B, '#crash').hidden ? 'no crash bar; look: are both in the same sky?' : 'FAIL crash bar: ' + $(A, '#crash').textContent + $(B, '#crash').textContent);
+  })().catch((e) => log('stopped: ' + e.message));
+</script>

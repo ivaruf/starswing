@@ -424,6 +424,146 @@ input[type="range"]::-moz-range-thumb {
   grid-template-columns: 1fr 1fr;
   width: 100%;
 }
+/* A guest has no Play again: its one button takes the row. */
+#over-again[hidden] + #over-main {
+  grid-column: 1 / -1;
+}
+
+/* ---- online: the lobby card ---- */
+
+/* geometry_pong's lobby in this sky's light: the same glass and buttons as
+   every other card, the code glowing like a caught star, and each seat a
+   round comet in its player's colour. */
+.online-head {
+  display: grid;
+  gap: 6px;
+}
+.online-step {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.status {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--dim);
+}
+.status.warn {
+  color: var(--gold);
+}
+/* The picture code (hub §8): three slots that fill as the keypad is
+   tapped, and the same three, big, in the room — what a host reads out and
+   a guest checks they got right. Emoji from the system font: no download. */
+.code-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.code-slot {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  line-height: 1;
+  border-radius: 14px;
+  border: 1px solid var(--edge);
+  background: rgba(90, 200, 255, 0.07);
+}
+.code-slot.empty {
+  color: var(--dim);
+  font-size: 20px;
+  font-weight: 700;
+}
+.code-row.hero {
+  gap: 12px;
+}
+.code-row.hero .code-slot {
+  width: 84px;
+  height: 84px;
+  font-size: 46px;
+  border-color: rgba(90, 200, 255, 0.45);
+  background: rgba(90, 200, 255, 0.1);
+  box-shadow: 0 0 26px rgba(90, 200, 255, 0.18);
+}
+.code-words {
+  margin: 0;
+  min-height: 1.3em;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--dim);
+}
+/* Twelve keys, six by two: alternatives, so one size each (hub §2). */
+.pad {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+#room-wait {
+  text-align: center;
+}
+.pad-key {
+  color: inherit;
+  min-height: var(--tap);
+  font-size: 26px;
+  line-height: 1;
+  border-radius: 14px;
+  border: 1px solid var(--edge);
+  background: rgba(130, 170, 255, 0.08);
+  cursor: pointer;
+}
+.pad-key:active {
+  background: rgba(90, 200, 255, 0.2);
+}
+.room-code-block {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+}
+/* The seats: one group, so one grid with a shared swatch gutter (hub §2). */
+.seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+.seat {
+  --c: var(--ice);
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  font-size: 0.85rem;
+}
+.seat::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  background: var(--c);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--c);
+}
+.seat.bot {
+  color: var(--dim);
+}
+.seat.bot::before {
+  opacity: 0.45;
+}
+.seat.me {
+  border-color: var(--c);
+  box-shadow: inset 0 0 0 1px var(--c);
+}
+#online-back {
+  margin-top: 4px;
+}
 
 /* ---- a sideways phone: two columns, nothing scrolls ---- */
 
@@ -442,7 +582,56 @@ input[type="range"]::-moz-range-thumb {
   }
   .start {
     grid-template-columns: 1fr 1fr;
+    grid-template-areas: "title doors" "setup doors";
     align-items: center;
+  }
+  .title-block {
+    grid-area: title;
+  }
+  .setup {
+    grid-area: setup;
+  }
+  .doors {
+    grid-area: doors;
+  }
+  /* The lobby: the heading, the status and Back down the left, whichever
+     step is showing down the right. */
+  .online {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "head step" "status step" "back step";
+    align-items: center;
+  }
+  .online-head {
+    grid-area: head;
+  }
+  .online-step {
+    grid-area: step;
+  }
+  #online-status {
+    grid-area: status;
+  }
+  #online-back {
+    grid-area: back;
+  }
+  .code-row.hero .code-slot {
+    width: 62px;
+    height: 62px;
+    font-size: 34px;
+  }
+  .code-slot {
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
+  }
+  .pad-key {
+    min-height: 40px;
+    font-size: 22px;
+  }
+  .seats {
+    grid-template-columns: 1fr 1fr;
+  }
+  .seat {
+    padding: 4px 8px;
   }
   .menu {
     grid-template-columns: 1fr 1fr;

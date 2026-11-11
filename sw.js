@@ -20,7 +20,7 @@
 // All paths are RELATIVE: the game is served from /<slug>/ and is also framed
 // by the arcade from a sibling directory.
 
-const VERSION = 'v0.1.0'; // the first build: one button, a sky of stars, five zone colours
+const VERSION = 'v0.2.0'; // together: up to four comets on one screen or online, and a lost one rejoins a friend's star
 const PREFIX = 'starswing-';
 const CACHE = `${PREFIX}${VERSION}`;
 
@@ -41,6 +41,15 @@ const ASSETS = [
   './js/ui.js',
   './js/audio.js',
   './js/i18n.js',
+  './js/lobby.js',
+  './js/net/protocol.js',
+  './js/net/codes.js',
+  './js/net/webrtc.js',
+  './js/net/rendezvous.js',
+  './js/net/host.js',
+  './js/net/host-worker.js',
+  './js/net/guest.js',
+  './vendor/peerjs.js',
   './audio/grab.m4a',
   './audio/release.m4a',
   './audio/dust.m4a',

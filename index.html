@@ -55,8 +55,16 @@
           <h1 class="wordmark" aria-label="Starswing"><span>STAR</span><span>SWING</span></h1>
           <p class="tag" data-i18n="start.how">Hold for å gripe en stjerne og svinge rundt den. Slipp for å fly videre. Hvor høyt kommer du?</p>
         </div>
+        <!-- How many share this screen: 1 is the solo game, 2 to 4 give each
+             player a strip of the glass (js/main.js). For the visit only. -->
+        <div class="setup lang-row">
+          <span class="cap" id="players-cap" data-i18n="players">Spillere</span>
+          <div class="seg" id="players" role="group" aria-labelledby="players-cap"></div>
+        </div>
         <div class="doors">
           <button id="play" class="go" type="button" data-i18n="play">Spill</button>
+          <!-- One player per screen, over WebRTC (js/lobby.js, js/net/). -->
+          <button id="online-btn" class="go alt" type="button" data-i18n="online">På nett</button>
           <!-- UPDATE READY: only on the start screen, which is gone for the
                whole of a run, so no deploy can reload a climb away. Owned
                end to end by js/update.js, which nothing imports. -->
@@ -76,6 +84,8 @@
         THE MENU PANEL, the one door behind the three-bar plate (hub §2). Two
         faces of one card, chosen by js/ui.js:
           in a run     "Pause": Resume, Restart, Main menu
+          online run   "Menu": the same, but the sky carries on behind it
+                       and only the host has Restart
           elsewhere    "Settings": no Resume, and a Back
         Both carry MUSIC and EFFECTS, the language row, and the way back to
         the arcade last. There is no separate sound panel.
@@ -135,6 +145,53 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6" /></svg>
           <span class="exit-label">Tilbake til arkaden</span>
         </button>
+      </section>
+
+      <!--
+        ONLINE (js/lobby.js). One card, three steps, one shown at a time:
+          choose   Create room / Join
+          code     the picture keypad and Join
+          room     the code, big, the seats, and Play for the host
+        Back is always last and goes one step back, and so does Escape (hub
+        §2: a multi-step flow's Escape is that step's own Back). No way back
+        to the arcade here: this card is opened from the start screen, which
+        has it.
+      -->
+      <section id="online" class="card online" hidden>
+        <div class="online-head">
+          <h2 data-i18n="online">På nett</h2>
+          <p id="online-tag" class="tag"></p>
+        </div>
+        <div id="online-choose" class="online-step">
+          <div class="actions">
+            <button id="online-host" class="go" type="button" data-i18n="online.host">Lag rom</button>
+            <button id="online-join" class="go alt" type="button" data-i18n="online.join">Bli med</button>
+          </div>
+        </div>
+        <!-- Joining: three pictures tapped on a keypad of twelve (hub §8,
+             "Room codes are pictures"). js/lobby.js fills the keys from
+             js/net/codes.js, so the pictures live in one place. -->
+        <div id="online-code" class="online-step" hidden>
+          <div id="pad-slots" class="code-row" aria-hidden="true"></div>
+          <p id="pad-words" class="code-words" aria-live="polite"></p>
+          <div id="pad-keys" class="pad" role="group" data-i18n-label="online.code" aria-label="Kode"></div>
+          <div class="actions pair">
+            <button id="pad-clear" class="go alt" type="button" data-i18n="online.clear">Visk ut</button>
+            <button id="code-go" class="go" type="button" data-i18n="online.join" disabled>Bli med</button>
+          </div>
+        </div>
+        <div id="online-room" class="online-step" hidden>
+          <div class="room-code-block">
+            <span class="cap" data-i18n="online.code">Kode</span>
+            <div id="room-code" class="code-row hero" role="img" aria-live="polite"></div>
+            <p id="room-words" class="code-words"></p>
+          </div>
+          <ul id="room-seats" class="seats"></ul>
+          <button id="room-start" class="go" type="button" data-i18n="play" hidden>Spill</button>
+          <p id="room-wait" class="tag" data-i18n="online.guestWait" hidden>Venter på at verten starter.</p>
+        </div>
+        <p id="online-status" class="status" role="status"></p>
+        <button id="online-back" class="go alt" type="button" data-i18n="back">Tilbake</button>
       </section>
 
       <!-- The end of a run. Escape is its secondary button: Main menu. -->
