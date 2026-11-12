@@ -13,6 +13,14 @@
   the path between them is the real one (the PeerJS broker when online, else
   BroadcastChannel), which is the point. Not shipped: sw.js does not list it.
 
+  ?race makes the run a race (sim.js RACE): the host picks Race in the room
+  and the guest must see it picked. Then each sky is its own, with the other
+  comet a faint ghost in it, and a lost comet comes back on its own star.
+
+  Headless Chrome needs --disable-features=WebRtcHideLocalIpsWithMdns, or its
+  mDNS-hidden local addresses never resolve and the guest is told the host
+  did not answer (seen 2026-11-12).
+
   For a headless screenshot add ?hang: an image that never loads keeps the
   load event from firing, so Chrome's --timeout decides when the picture is
   taken (the trick tools/review/driver.html uses).
@@ -27,7 +35,8 @@
 <iframe id="a" src="../"></iframe><iframe id="b" src="../"></iframe>
 <pre id="log"></pre>
 <script>
-  if (location.search === '?hang') document.body.appendChild(new Image()).src = 'http://10.255.255.1/hang.png';
+  const q = new URLSearchParams(location.search);
+  if (q.has('hang')) document.body.appendChild(new Image()).src = 'http://10.255.255.1/hang.png';
   const log = (s) => (document.getElementById('log').textContent += s + '\n');
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const A = document.getElementById('a'), B = document.getElementById('b');
@@ -55,6 +64,10 @@
     $(B, '#code-go').click();
     await until('guest is in the room', () => !$(B, '#online-room').hidden);
     await until('host sees the guest', () => A.contentDocument.querySelectorAll('#room-seats .seat:not(.bot)').length === 2);
+    if (q.has('race')) {
+      $(A, '#room-mode-race').click();
+      await until('the guest sees the race', () => $(B, '#room-mode-race').getAttribute('aria-pressed') === 'true' && $(B, '#room-mode-race').disabled);
+    }
     $(A, '#room-start').click();
     await until('both skies are up', () => $(A, '#online').hidden && $(B, '#online').hidden);
     // The guest alone presses and lets go a few times while the host stays

@@ -20,7 +20,7 @@
 // All paths are RELATIVE: the game is served from /<slug>/ and is also framed
 // by the arcade from a sibling directory.
 
-const VERSION = 'v0.2.0'; // together: up to four comets on one screen or online, and a lost one rejoins a friend's star
+const VERSION = 'v0.3.0'; // race: 1-4 players against a 90 s clock, a column each on one screen or one sky each online
 const PREFIX = 'starswing-';
 const CACHE = `${PREFIX}${VERSION}`;
 

@@ -327,6 +327,12 @@ input[type="range"]:focus-visible {
   line-height: 1.4;
 }
 
+/* The start screen's Players and Mode: one block, one caption gutter. */
+.setup {
+  display: grid;
+  gap: 10px;
+}
+
 /* Segmented rows: alternatives, so one size each (flex: 1 1 0). */
 .seg {
   display: flex;
@@ -347,6 +353,13 @@ input[type="range"]:focus-visible {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
+}
+/* A guest's view of the host's choice: the choice stays lit. */
+.seg-btn:disabled {
+  cursor: default;
+}
+.seg-btn:disabled:not([aria-pressed="true"]) {
+  opacity: 0.45;
 }
 .seg-btn[aria-pressed="true"] {
   border-color: var(--ice);

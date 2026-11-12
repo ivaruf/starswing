@@ -31,6 +31,23 @@ the camera comes back the same way, so everyone stays in one picture.
 
 The best score is the solo game's alone.
 
+## Racing
+
+Pick **Race** on the start card's Mode row (or, online, in the room) and the
+same one to four players race instead: a 3‑2‑1 countdown, then 90 seconds,
+and the highest climb wins. Everyone flies their own copy of one sky, grown
+from one seed so the stars are the same for all, and sees the others as
+faint ghost comets in it. Lives never run out: a lost comet goes back to the
+star it fell off while the camera walks down to it, and the two seconds that
+takes are what the fall cost.
+
+- **One screen**: the glass is cut into one column per player, each with its
+  own camera, height and clock. The buttons are the same strips and keys as
+  together.
+- **Online**: each device draws its own sky, with everyone's height listed
+  under its own. Someone who joins mid-race starts at the bottom with what is
+  left of the clock.
+
 ## Running it
 
 Serve the hub directory and open `/starswing/`:
@@ -47,8 +64,8 @@ hidden, which is expected.
 
 | file | owns |
 | --- | --- |
-| `js/sim.js` | the whole game, no DOM: physics, the sky's generation, the bot |
-| `js/render.js` | the canvas: sky, glow, sparks, HUD; picks the field for the screen |
+| `js/sim.js` | the whole game, no DOM: physics, the sky's generation, the race, the bot |
+| `js/render.js` | the canvas: sky, glow, sparks, HUD, a race's ghosts and columns; picks the field for the screen |
 | `js/main.js` | the loop, the buttons (one, or one per strip), the states, Escape, the best score |
 | `js/lobby.js` | the Online card: create or join a room, the picture keypad, the seats |
 | `js/net/` | protocol (the frame on the wire), host and its worker, guest; `codes`, `rendezvous` and `webrtc` are geometry_pong's unchanged |
@@ -64,13 +81,13 @@ geometry_pong's, cut to what this game has.
 ## Checks
 
 ```sh
-node tools/sim-smoke.mjs     # the bot climbs; a lost comet rejoins a friend; a frame survives the wire
+node tools/sim-smoke.mjs     # the bot climbs; a lost comet rejoins a friend; a race is fair and timed; a frame survives the wire
 python3 tools/make-icons.py  # after changing the motif
 ```
 
 `tools/net-check.html`, opened through the hub's server, puts a host and a
-guest side by side and drives them through a room and a run. It is something
-to look at, not an assertion.
+guest side by side and drives them through a room and a run (`?race` for a
+race). It is something to look at, not an assertion.
 
 ## Sound
 

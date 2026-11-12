@@ -1,10 +1,11 @@
 // node tools/sim-smoke.mjs — the sim's self-check. Flies the start screen's
 // bot in a tall and a wide sky and asserts the game is climbable, that every
 // number stays finite, that a parked comet is safe, and that a comet nobody
-// catches falls out of the sky.
+// catches falls out of the sky. Then the race: one sky for everyone, a fall
+// that costs time and never the run, and a clock that ends it.
 import assert from 'node:assert/strict';
 import { packFrame, unpackFrame, packHold, unpackHold, cleanEvent } from '../js/net/protocol.js';
-import { createGame, step, seat, autopilot, score, metres, park, TICK } from '../js/sim.js';
+import { createGame, createRace, step, stepRace, seat, autopilot, score, metres, park, TICK, RACE } from '../js/sim.js';
 
 const finite = (g) => [g.camY, g.top, ...g.comets.flatMap((c) => [c.x, c.y, c.vx, c.vy])].every(Number.isFinite);
 
@@ -98,6 +99,63 @@ for (const shape of [{ w: 600, view: 1300 }, { w: 1300, view: 720 }]) {
     });
   }
 }
+// A race: every sky from one seed, so everyone climbs the same stars.
+let r = createRace({ w: 600, view: 1100, seats: [true, true] });
+const sky = (k) => r.games[k].stars.map((st) => `${st.x.toFixed(2)},${st.y.toFixed(2)},${st.dark}`).join(' ');
+assert.equal(sky(0), sky(1), 'one seed, one sky');
+// Nobody leaves before the countdown does.
+for (let i = 0; i < 60 * 2; i++) stepRace(r, TICK, [true, true]);
+assert.ok(r.games.every((k) => k.status === 'parked'));
+// After it, seat 0 presses once and lets go. It falls, and comes back
+// parked, on screen, on the star it fell off; seat 1 never moves.
+while (r.t <= 0) stepRace(r, TICK, [false, false]);
+stepRace(r, TICK, [true, false]);
+let fell = false, back = false;
+for (let i = 0; i < 60 * 10 && !back; i++) {
+  stepRace(r, TICK, [false, false]);
+  for (const e of r.games[0].events) {
+    if (e.type === 'out') fell = true;
+    if (e.type === 'join') back = true;
+    assert.equal(e.who, 0);
+  }
+  r.games[0].events.length = 0;
+}
+assert.ok(fell && back, 'a fall in a race is not the end');
+let c = r.games[0].comets[0];
+assert.equal(c.status, 'parked');
+assert.ok(c.tether.x === r.games[1].stars[0].x && c.tether.y === r.games[1].stars[0].y, 'back on the star it fell off');
+assert.ok(c.tether.y > r.games[0].camY, 'and on screen');
+// The clock ends it, for everyone.
+for (let i = 0; i < 60 * (RACE + 1) && r.status !== 'over'; i++) stepRace(r, TICK, [false, false]);
+assert.equal(r.status, 'over');
+assert.ok(r.games.every((k) => k.status === 'over' && k.events.some((e) => e.type === 'over')));
+
+// The bot races a whole clock, falling and coming back as it goes.
+r = createRace({ w: 1300, view: 720, seats: [true] });
+for (let i = 0; i < 60 * (RACE + 5); i++) {
+  stepRace(r, TICK, [autopilot(r.games[0])]);
+  r.games[0].events.length = 0;
+  assert.ok(finite(r.games[0]), 'a number went non-finite, racing');
+  assert.ok(r.games[0].stars.length < 200, 'a racer\'s sky is not being forgotten');
+}
+assert.ok(r.info.metres[0] > 0);
+
+// A seat's race frame: its own sky, the others as ghosts, the clock, the heights.
+r = createRace({ w: 600, view: 1300, seats: [true, true, false, true] });
+for (let i = 0; i < 60 * 20; i++) {
+  stepRace(r, TICK, [autopilot(r.games[0]), autopilot(r.games[1]), false, false]);
+  for (const k of r.games) k.events.length = 0;
+}
+const f = unpackFrame(packFrame(r.views[1], 9));
+assert.ok(f.race && Math.abs(f.race.left - r.info.left) < 0.06);
+assert.deepEqual(f.race.metres, r.info.metres);
+assert.equal(f.comets[2].status, 'none');
+assert.ok(f.comets[0].status !== 'none' && !f.comets[0].tether, 'a ghost holds no star in this sky');
+assert.equal(!!f.comets[1].tether, !!r.games[1].comets[0].tether);
+assert.equal(metres(f), r.info.metres[1]);
+assert.equal(unpackFrame(packFrame(createGame(), 1)).race, null);
+big = Math.max(big, packFrame(r.views[1], 9).length);
+
 console.log(`largest frame ${big} bytes`);
 assert.ok(big < 1150, 'a frame fits one packet');
 assert.equal(unpackFrame(new Uint8Array(40)), null);

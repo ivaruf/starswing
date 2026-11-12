@@ -56,10 +56,20 @@
           <p class="tag" data-i18n="start.how">Hold for å gripe en stjerne og svinge rundt den. Slipp for å fly videre. Hvor høyt kommer du?</p>
         </div>
         <!-- How many share this screen: 1 is the solo game, 2 to 4 give each
-             player a strip of the glass (js/main.js). For the visit only. -->
-        <div class="setup lang-row">
-          <span class="cap" id="players-cap" data-i18n="players">Spillere</span>
-          <div class="seg" id="players" role="group" aria-labelledby="players-cap"></div>
+             player a strip of the glass (js/main.js). Then together or a
+             race, which Online takes into the room. For the visit only. -->
+        <div class="setup">
+          <div class="lang-row">
+            <span class="cap" id="players-cap" data-i18n="players">Spillere</span>
+            <div class="seg" id="players" role="group" aria-labelledby="players-cap"></div>
+          </div>
+          <div class="lang-row">
+            <span class="cap" id="mode-cap" data-i18n="mode">Modus</span>
+            <div class="seg" id="mode" role="group" aria-labelledby="mode-cap">
+              <button type="button" class="seg-btn" id="mode-together" data-race="0" aria-pressed="true" data-i18n="mode.together">Sammen</button>
+              <button type="button" class="seg-btn" id="mode-race" data-race="1" aria-pressed="false" data-i18n="mode.race">Kappløp</button>
+            </div>
+          </div>
         </div>
         <div class="doors">
           <button id="play" class="go" type="button" data-i18n="play">Spill</button>
@@ -187,6 +197,14 @@
             <p id="room-words" class="code-words"></p>
           </div>
           <ul id="room-seats" class="seats"></ul>
+          <!-- The host's choice; a guest sees it with the buttons off. -->
+          <div class="lang-row">
+            <span class="cap" id="room-mode-cap" data-i18n="mode">Modus</span>
+            <div class="seg" id="room-mode" role="group" aria-labelledby="room-mode-cap">
+              <button type="button" class="seg-btn" id="room-mode-together" data-race="0" aria-pressed="true" data-i18n="mode.together">Sammen</button>
+              <button type="button" class="seg-btn" id="room-mode-race" data-race="1" aria-pressed="false" data-i18n="mode.race">Kappløp</button>
+            </div>
+          </div>
           <button id="room-start" class="go" type="button" data-i18n="play" hidden>Spill</button>
           <p id="room-wait" class="tag" data-i18n="online.guestWait" hidden>Venter på at verten starter.</p>
         </div>

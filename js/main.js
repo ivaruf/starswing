@@ -23,6 +23,12 @@
  *          device's button goes up each screen frame, and sounds and sparks
  *          come from the host's relayed events.
  *
+ * TOGETHER OR A RACE, whichever the start screen's Mode row says (the room's,
+ * online). A race on this device (`race`, sim.js RACE) is one sim per player
+ * and one renderer per player, each drawing a column of the glass, which is
+ * the same strip that player's finger already owns. Online a race is the
+ * host's: this device draws its own seat's sky, as ever.
+ *
  * THE LOOP. sim.js's 60 Hz TICK with an accumulator, frame dt clamped to
  * 0.1 s and at most 8 steps a frame (hub §10).
  *
@@ -39,7 +45,7 @@
  * game's alone: a height climbed together is not compared with it.
  */
 
-import { createGame, step, autopilot, park, score, metres, TICK } from './sim.js';
+import { createGame, createRace, step, stepRace, autopilot, park, score, metres, TICK } from './sim.js';
 import { createRenderer, shape } from './render.js';
 import { createUI } from './ui.js';
 import { createLobby } from './lobby.js';
@@ -47,7 +53,8 @@ import { audio } from './audio.js';
 
 const BEST_KEY = 'starswing.best.v1';
 const canvas = document.getElementById('view');
-const renderer = createRenderer(canvas);
+const renderers = [createRenderer(canvas)]; // one per column in a race on this screen
+const renderer = renderers[0];
 
 let best = 0;
 try {
@@ -60,7 +67,9 @@ try {
 let state = 'attract';
 let mode = 'solo';
 let players = 1;
+let racing = false; // the start screen's Mode row
 let net = null; // the online session whose run is in the sky
+let race = null; // a race on this device; `game` is unused while there is one
 let game = createGame(shape());
 let acc = 0;
 let rest = 0;
@@ -118,6 +127,7 @@ function startAttract() {
   state = 'attract';
   mode = 'solo';
   net = null;
+  race = null;
   clearTimeout(overTimer);
   audio.music(false);
   game = createGame(shape());
@@ -127,7 +137,7 @@ function startAttract() {
 
 function begin() {
   clearTimeout(overTimer);
-  renderer.reset();
+  for (const r of renderers) r.reset();
   clearInput();
   state = 'play';
   acc = 0;
@@ -135,11 +145,15 @@ function begin() {
   audio.music(true);
 }
 
-/* A run on this device: alone, or `players` comets sharing the screen. */
+/* A run on this device: alone, or `players` comets sharing the screen,
+ * together or racing in a column each. */
 function startGame() {
   net = null;
   mode = players > 1 ? 'local' : 'solo';
-  game = createGame({ ...shape(), seats: new Array(players).fill(true) });
+  const seats = new Array(players).fill(true);
+  race = racing ? createRace({ ...shape(innerWidth / players, innerHeight), seats }) : null;
+  if (!race) game = createGame({ ...shape(), seats });
+  while (renderers.length < players) renderers.push(createRenderer(canvas));
   begin();
 }
 
@@ -147,6 +161,7 @@ function startGame() {
 function startOnline(session) {
   net = session;
   mode = 'net';
+  race = null;
   begin();
 }
 
@@ -164,7 +179,8 @@ function pause() {
 
 function resume() {
   if (state !== 'paused') return;
-  if (!net) park(game);
+  if (race) race.games.forEach(park);
+  else if (!net) park(game);
   state = 'play';
   acc = 0;
   ui.hideCards();
@@ -187,12 +203,20 @@ function backToRoom() {
   lobby.showRoom();
 }
 
+/* A race's seats that raced, highest first. */
+function standings(g) {
+  const list = [];
+  g.comets.forEach((c, seat) => c.status !== 'none' && list.push({ seat, m: g.race.metres[seat] }));
+  return list.sort((a, b) => b.m - a.m);
+}
+
 function gameOver() {
   state = 'over';
-  const g = game;
+  const run = race || game;
+  const g = race ? race.views[0] : game; // online, the host's frame of our seat
   const session = net;
   const points = score(g);
-  const record = mode === 'solo' && points > best;
+  const record = mode === 'solo' && !g.race && points > best;
   if (record) {
     best = points;
     try {
@@ -202,9 +226,12 @@ function gameOver() {
     }
   }
   audio.end(record);
-  const result = { points, metres: metres(g), dust: g.dustN, best, record, team: mode !== 'solo', online: !!session, canAgain: !session || !!session.startMatch };
+  const result = {
+    points, metres: metres(g), dust: g.dustN, best, record, team: mode !== 'solo', online: !!session, canAgain: !session || !!session.startMatch,
+    race: g.race ? standings(g) : null, mine: session ? session.seat : -1,
+  };
   const show = () => {
-    if (state !== 'over' || net !== session || (!session && game !== g)) return;
+    if (state !== 'over' || net !== session || (!session && (race || game) !== run)) return;
     if (ui.inSettings()) {
       overTimer = setTimeout(show, 400);
       return;
@@ -214,11 +241,13 @@ function gameOver() {
   overTimer = setTimeout(show, 1300);
 }
 
-/* The sim's events, the host's or our own, as light and sound. */
-function drain(events) {
+/* The sim's events, the host's or our own, as light and sound; in a race on
+ * this screen, column i's. */
+function drain(events, i = 0) {
+  const g = race ? race.views[i] : game;
   let ended = false;
   for (const e of events) {
-    renderer.event(e, game);
+    renderers[i].event(e, g);
     if (state !== 'attract') audio.event(e);
     if (e.type === 'over') ended = true;
   }
@@ -226,11 +255,12 @@ function drain(events) {
 }
 
 const ui = createUI({
-  onPlay(n) {
+  onPlay(n, r) {
     players = n;
+    racing = r;
     startGame();
   },
-  onOnline: () => lobby.open(),
+  onOnline: (r) => lobby.open(r),
   onResume: resume,
   onRestart() {
     if (!net) startGame();
@@ -297,14 +327,15 @@ document.addEventListener('visibilitychange', () => {
 });
 
 addEventListener('resize', () => {
-  renderer.resize();
+  for (const r of renderers) r.resize();
   // The start screen's sky follows the screen; a run keeps the field it has.
   if (state === 'attract') game = createGame(shape());
 });
 
 let last = performance.now();
 let time = 0;
-const opts = { attract: true, best: 0, mine: -1, strips: 0, keys: null };
+const opts = { attract: true, best: 0, mine: -1, strips: 0, keys: null, box: null, key: null };
+const boxes = [[0, 0], [0, 0], [0, 0], [0, 0]];
 
 function frame(now) {
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
@@ -324,13 +355,21 @@ function frame(now) {
       if (state === 'attract') {
         bot[0] = autopilot(game);
         step(game, TICK, bot);
-      } else step(game, TICK, state === 'play' ? holds : NONE);
+      } else if (race) stepRace(race, TICK, state === 'play' ? holds : NONE);
+      else step(game, TICK, state === 'play' ? holds : NONE);
       acc -= TICK;
       steps++;
     }
     if (steps === 8) acc = 0;
-    drain(game.events);
-    game.events.length = 0;
+    if (race) {
+      for (let i = 0; i < race.games.length; i++) {
+        drain(race.games[i].events, i);
+        race.games[i].events.length = 0;
+      }
+    } else {
+      drain(game.events);
+      game.events.length = 0;
+    }
     // The start screen's bot rests a moment where it fell, then goes again.
     if (state === 'attract' && game.status === 'over' && (rest += dt) > 2) {
       game = createGame(shape());
@@ -340,11 +379,24 @@ function frame(now) {
   }
 
   opts.attract = state === 'attract';
-  opts.best = mode === 'solo' ? best : 0;
+  opts.best = mode === 'solo' && !race ? best : 0;
   opts.mine = net ? net.seat : -1;
-  opts.strips = mode === 'local' ? players : 0;
+  opts.strips = mode === 'local' && !race ? players : 0;
   opts.keys = mode === 'local' && !touch ? KEY_NAMES[players] : null;
-  renderer.draw(game, time, state === 'paused' && !net ? 0 : dt, opts);
+  const rdt = state === 'paused' && !net ? 0 : dt;
+  if (race) {
+    // A column each, left to right in seat order, as the strips and keys are.
+    const n = race.views.length, cw = innerWidth / n;
+    for (let i = 0; i < n; i++) {
+      boxes[i][0] = i * cw;
+      boxes[i][1] = cw;
+      opts.box = boxes[i];
+      opts.mine = i;
+      opts.key = opts.keys ? opts.keys[i] : null;
+      renderers[i].draw(race.views[i], time, rdt, opts);
+    }
+    opts.box = opts.key = null;
+  } else renderer.draw(game, time, rdt, opts);
   requestAnimationFrame(frame);
 }
 

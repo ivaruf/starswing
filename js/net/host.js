@@ -13,6 +13,10 @@
  * comes back, on a star a friend is holding (sim.js `seat`). A guest that
  * leaves takes its comet with it.
  *
+ * A RACE (sim.js RACE) is the host's choice, made in the room and carried in
+ * every roster message so a guest's room card shows it. The worker then runs
+ * one sky per seat, and each peer is sent its own seat's frame and events.
+ *
  * THE SKY IS THE HOST'S SHAPE: tall on a phone held upright, wide on a
  * laptop. A guest on the other kind of screen sees it letterboxed.
  *
@@ -31,7 +35,7 @@ import { hostRendezvous } from './rendezvous.js';
 import { newCode } from './codes.js';
 import { SEATS } from '../sim.js';
 
-export async function hostSession({ w, view }) {
+export async function hostSession({ w, view, race = false }) {
   const code = newCode();
   const seats = Array.from({ length: SEATS }, (_, i) => (i === 0 ? 'host' : 'open'));
 
@@ -44,6 +48,7 @@ export async function hostSession({ w, view }) {
     why: null,
     watch: null,
     started: false,
+    race,
     game: null, // the latest frame, decoded: what this device draws
     /* main.js and js/lobby.js set these. */
     onRoster: null,
@@ -60,7 +65,7 @@ export async function hostSession({ w, view }) {
 
   const say = (key, ...args) => session.onStatus?.(key, ...args);
   const rosterList = () => seats.map((who, i) => ({ seat: i, who }));
-  const rosterMessage = (t, peer) => ({ t, you: peer.seat, roster: session.roster, started: session.started });
+  const rosterMessage = (t, peer) => ({ t, you: peer.seat, roster: session.roster, started: session.started, race: session.race });
 
   function publishRoster() {
     session.roster = rosterList();
@@ -146,13 +151,17 @@ export async function hostSession({ w, view }) {
 
   function bootWorker() {
     worker = new Worker(new URL('./host-worker.js', import.meta.url), { type: 'module' });
+    // One frame and one list of events per seat (host-worker.js).
     worker.onmessage = ({ data }) => {
       if (data.type !== 'FRAME' || !session.started) return;
-      // Reliable first: a guest that hears a grab a frame early has lost nothing.
-      if (data.events.length) broadcast({ t: MSG.EVENTS, e: data.events }, false);
-      broadcast(data.bytes, true);
-      session.game = unpackFrame(data.bytes) || session.game;
-      if (data.events.length) session.onEvents?.(data.events);
+      for (const peer of peers.values()) {
+        if (!peer.hello) continue;
+        // Reliable first: a guest that hears a grab a frame early has lost nothing.
+        if (data.events[peer.seat].length) peer.channel.send({ t: MSG.EVENTS, e: data.events[peer.seat] }, false);
+        peer.channel.send(data.bytes[peer.seat], true);
+      }
+      session.game = unpackFrame(data.bytes[0]) || session.game;
+      if (data.events[0].length) session.onEvents?.(data.events[0]);
     };
   }
 
@@ -163,6 +172,12 @@ export async function hostSession({ w, view }) {
     worker.postMessage({ type: 'HOLD', seat: 0, hold });
   };
 
+  /* Together or a race, for the next run: the room card's Mode row. */
+  session.setRace = (on) => {
+    session.race = !!on;
+    publishRoster();
+  };
+
   /* A run, first or again: a new game in the worker is the whole of it. The
    * roster, the connections and the code all survive. */
   session.startMatch = () => {
@@ -171,7 +186,7 @@ export async function hostSession({ w, view }) {
     lastLocal = false;
     for (const peer of peers.values()) peer.hold = false;
     if (!worker) bootWorker();
-    worker.postMessage({ type: 'SETUP', w, view, seats: seats.map((who) => who !== 'open') });
+    worker.postMessage({ type: 'SETUP', w, view, race: session.race, seats: seats.map((who) => who !== 'open') });
     for (const peer of peers.values()) if (peer.hello) peer.channel.send(rosterMessage(MSG.BEGIN, peer));
     session.onBegin?.();
   };

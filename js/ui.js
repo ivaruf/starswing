@@ -3,13 +3,16 @@
  * the way back to the arcade. Decides what is showing and what the words
  * say; main.js decides when.
  *
- *   start  the wordmark, the Players row (1 to 4 on this screen), Play,
- *          Online, the update button, and the way back to the arcade last
+ *   start  the wordmark, the Players row (1 to 4 on this screen), the Mode
+ *          row (Together or Race, which Online takes into the room too),
+ *          Play, Online, the update button, and the way back to the arcade
+ *          last
  *   menu   the one panel behind the three-bar plate. In a run it is the
  *          Pause face (Resume, Restart, Main menu); anywhere else it is the
  *          Settings face (no Resume, a Back). Both carry MUSIC and EFFECTS,
  *          the language row and the way back to the arcade, last.
- *   over   the points, what they were made of, then Play again / Main menu
+ *   over   the points, what they were made of, then Play again / Main menu;
+ *          after a race, who won and everyone's height instead
  *   online the lobby card; js/lobby.js fills it, this file only shows it
  *
  * ONLINE THE MENU DOES NOT PAUSE (hub §2): the run belongs to the whole
@@ -30,6 +33,8 @@
 
 import { audio } from './audio.js';
 import { t, setLang, paintStatic } from './i18n.js';
+import { RACE } from './sim.js';
+import { SEAT_CSS } from './render.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -67,8 +72,17 @@ export function createUI({ onPlay, onOnline, onResume, onRestart, onMainMenu, on
     $('players').appendChild(b);
   }
 
-  $('play').addEventListener('click', () => onPlay(players));
-  $('online-btn').addEventListener('click', onOnline);
+  // Together or a race: two alternatives, for the visit only.
+  let race = false;
+  for (const b of $('mode').children) {
+    b.addEventListener('click', () => {
+      race = b.dataset.race === '1';
+      for (const x of $('mode').children) x.setAttribute('aria-pressed', String(x === b));
+    });
+  }
+
+  $('play').addEventListener('click', () => onPlay(players, race));
+  $('online-btn').addEventListener('click', () => onOnline(race));
   $('menu-resume').addEventListener('click', onResume);
   $('menu-restart').addEventListener('click', onRestart);
   $('menu-main').addEventListener('click', onMainMenu);
@@ -127,9 +141,22 @@ export function createUI({ onPlay, onOnline, onResume, onRestart, onMainMenu, on
   function paintOver() {
     if (!over) return;
     cards.over.classList.toggle('record', over.record);
-    $('over-title').textContent = t('over.points', over.points);
+    const title = $('over-title');
+    title.textContent = t('over.points', over.points);
+    title.style.color = '';
     $('over-record').hidden = !over.record;
     $('over-score').textContent = over.team ? t('over.team', over.metres, over.dust) : t('over.detail', over.metres, over.dust, over.best);
+    const r = over.race;
+    if (r && r.length < 2) {
+      title.textContent = `${r[0] ? r[0].m : over.metres} m`;
+      $('over-score').textContent = t('over.inTime', RACE);
+    } else if (r) {
+      // The winner in their own colour; a tie at the top is nobody's.
+      const tie = r[0].m === r[1].m;
+      title.textContent = tie ? t('over.draw') : r[0].seat === over.mine ? t('over.youWin') : t('over.wins', r[0].seat);
+      if (!tie) title.style.color = SEAT_CSS[r[0].seat];
+      $('over-score').textContent = r.map((x) => `${t(`colour.${x.seat}`)} ${x.m} m`).join(' · ');
+    }
     $('over-again').hidden = !over.canAgain;
     const main = $('over-main');
     main.dataset.i18n = over.online ? 'back' : 'mainMenu';

@@ -17,6 +17,11 @@
  * joins at 800 m is whole on the first frame it decodes, and unpackFrame
  * hands back an object js/render.js draws exactly as it draws the sim's own.
  *
+ * A RACE (sim.js RACE) sends each seat its own sky: the frame of game i, with
+ * everyone else's comet in the comet slots as a ghost (no tether: their stars
+ * are not in this list), the clock, and every seat's height for the standings.
+ * The same 42-byte head says "no race" with a clock of 0xffff.
+ *
  * A GUEST SENDS ONE BIT: whether its button is down. There is no field in
  * which it could claim a position, a star or a score.
  *
@@ -26,8 +31,8 @@
 
 import { SEATS } from '../sim.js';
 
-// 1 since 2026-11-11, the first online build.
-export const NET_VERSION = 1;
+// 1 since 2026-11-11, the first online build. 2: the race (a longer head).
+export const NET_VERSION = 2;
 
 export const MSG = Object.freeze({
   HELLO: 'hello',
@@ -45,7 +50,8 @@ export const KIND_HOLD = 2;
 
 const STATUS = ['none', 'parked', 'play', 'out'];
 const GAME = ['parked', 'play', 'over'];
-const HEAD = 34;
+const HEAD = 42;
+const NO_RACE = 0xffff;
 const COMET = 19;
 const NONE = 255;
 // Stars and dust: x and (y - camY + 400) in sixteenths of a unit, as u16.
@@ -73,6 +79,9 @@ export function packFrame(g, frameNo) {
   v.setUint8(29, Math.min(g.zone, 255));
   v.setUint8(30, stars.length);
   v.setUint8(31, dust.length);
+  const r = g.race;
+  v.setUint16(32, r ? Math.min(NO_RACE - 1, Math.round(r.left * 10)) : NO_RACE);
+  for (let i = 0; r && i < SEATS; i++) v.setUint16(34 + 2 * i, Math.min(65535, r.metres[i] || 0));
   let o = HEAD;
   for (let i = 0; i < SEATS; i++, o += COMET) {
     const c = g.comets[i];
@@ -122,7 +131,9 @@ export function unpackFrame(bytes) {
     comets: [],
     stars: [],
     dust: [],
+    race: null,
   };
+  if (v.getUint16(32) !== NO_RACE) g.race = { left: v.getUint16(32) / 10, metres: [0, 1, 2, 3].map((i) => v.getUint16(34 + 2 * i)) };
   if (![g.t, g.camY, g.top, g.base].every(Number.isFinite) || g.w < 100 || g.view < 100) return null;
   let o = HEAD + SEATS * COMET;
   for (let i = 0; i < nStars; i++, o += 5) {

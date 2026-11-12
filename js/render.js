@@ -19,6 +19,13 @@
  * (`o.strips`) each player's strip of the glass carries a bar of their colour
  * along the bottom, and "Hold here" while their comet is parked.
  *
+ * RACE (sim.js header). `g.race` holds the clock and every seat's height, and
+ * the comet that is not `o.mine` is a ghost: faint, no beam, no target, the
+ * same stars underneath it because every racer's sky grows from one seed. The
+ * HUD is the height, the clock, and, online, where everybody else is. On one
+ * screen main.js runs one renderer per player, each drawing its own column
+ * (`o.box`); the baked pictures are shared between them.
+ *
  * `g` may be the sim's own game or a frame decoded off the wire
  * (js/net/protocol.js unpackFrame): draw() reads only what both carry.
  *
@@ -26,7 +33,7 @@
  * arrays written round-robin (hub §10). devicePixelRatio capped at 2.
  */
 
-import { ZONE, score, metres, target } from './sim.js';
+import { ZONE, RACE, score, metres, target } from './sim.js';
 import { t } from './i18n.js';
 
 // One accent per zone, cycling: ice, violet, rose, amber, aurora.
@@ -106,26 +113,41 @@ function farStars() {
   return cv;
 }
 
-/* The field for this screen: 600 wide and as tall as the screen makes it
-   when upright, 720 tall and as wide as the screen makes it when sideways. */
-export function shape() {
-  const a = innerWidth / Math.max(1, innerHeight);
+/* The field for this screen (or one column of it): 600 wide and as tall as
+   it makes it when upright, 720 tall and as wide as it makes it sideways. */
+export function shape(w = innerWidth, h = innerHeight) {
+  const a = w / Math.max(1, h);
   if (a < 1) return { w: 600, view: Math.min(1300, Math.max(760, 600 / a)) };
   return { w: Math.min(1300, Math.max(600, 720 * a)), view: 720 };
 }
 
+/* The baked pictures, once for every renderer: a race on one screen runs one
+   per column, and four sets of half-screen nebulae would be tens of MB. */
+let art = null;
+function bake() {
+  if (!art) {
+    art = {
+      glow: ZONES.map((c) => disc(c)),
+      glowWhite: disc([190, 215, 255]),
+      star: disc([190, 215, 255], 0.12, true), // a star nobody has caught yet
+      starLit: ZONES.map((c) => disc(c, 0.12, true)), // ... and one somebody has
+      glowGold: disc(GOLD, 0.2),
+      glowRed: disc(RED, 0.05),
+      blobs: ZONES.map(() => Array.from({ length: 9 }, () => [Math.random(), Math.random(), 0.25 + Math.random() * 0.35])),
+      far: farStars(),
+      clouds: [],
+      cw: 0,
+      ch: 0,
+    };
+  }
+  return art;
+}
+
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
-  const glow = ZONES.map((c) => disc(c));
-  const glowWhite = disc([190, 215, 255]);
-  const star = disc([190, 215, 255], 0.12, true); // a star nobody has caught yet
-  const starLit = ZONES.map((c) => disc(c, 0.12, true)); // ... and one somebody has
-  const glowGold = disc(GOLD, 0.2);
-  const glowRed = disc(RED, 0.05);
-  const blobs = ZONES.map(() => Array.from({ length: 9 }, () => [Math.random(), Math.random(), 0.25 + Math.random() * 0.35]));
-  let clouds = [];
-  const far = farStars();
-  let W = 0, H = 0, dpr = 1;
+  const A = bake();
+  const { glow, glowWhite, star, starLit, glowGold, glowRed, far } = A;
+  let CW = 0, CH = 0, dpr = 1; // the canvas, in CSS px
   let danger = null;
 
   const N = 320; // sparks: x, y, vx, vy, life, span, colour (-1 gold, -2 white, else zone)
@@ -142,12 +164,17 @@ export function createRenderer(canvas) {
 
   function resize() {
     dpr = Math.min(devicePixelRatio || 1, 2);
-    W = innerWidth;
-    H = innerHeight;
-    canvas.width = Math.round(W * dpr);
-    canvas.height = Math.round(H * dpr);
-    clouds = ZONES.map((c, i) => nebula(c, blobs[i], Math.ceil(W / 2), Math.ceil(H / 2)));
-    danger = ctx.createLinearGradient(0, H - 150, 0, H);
+    CW = innerWidth;
+    CH = innerHeight;
+    canvas.width = Math.round(CW * dpr);
+    canvas.height = Math.round(CH * dpr);
+    if (A.cw !== CW || A.ch !== CH) {
+      A.clouds = ZONES.map((c, i) => nebula(c, A.blobs[i], Math.ceil(CW / 2), Math.ceil(CH / 2)));
+      A.cw = CW;
+      A.ch = CH;
+    }
+    // Columns are always full height, so one gradient serves every one.
+    danger = ctx.createLinearGradient(0, CH - 150, 0, CH);
     danger.addColorStop(0, 'rgba(255,60,90,0)');
     danger.addColorStop(1, 'rgba(255,60,90,0.55)');
   }
@@ -210,7 +237,27 @@ export function createRenderer(canvas) {
     ctx.drawImage(img, x - r, y - r, 2 * r, 2 * r);
   }
 
+  /* One view of the sky: the whole canvas, or one column of it when `o.box`
+     is [x, width] in CSS px. */
   function draw(g, time, dt, o) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!o.box) return paint(g, time, dt, o, 0, CW, CH);
+    const x = o.box[0], w = o.box[1];
+    ctx.save();
+    ctx.translate(x, 0);
+    ctx.beginPath();
+    ctx.rect(0, 0, w, CH);
+    ctx.clip();
+    paint(g, time, dt, o, x, w, CH);
+    ctx.restore();
+    if (x > 0) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(150,190,255,0.3)';
+      ctx.fillRect(x - 0.5, 0, 1, CH);
+    }
+  }
+
+  function paint(g, time, dt, o, bx, W, H) {
     const s = Math.min(W / g.w, H / g.view); // world units to CSS px
     const ox = (W - g.w * s) / 2;
     const oy = H - (H - g.view * s) / 2;
@@ -226,7 +273,6 @@ export function createRenderer(canvas) {
       zoneFade = 0;
     }
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (shake > 0) {
       shake -= dt;
       ctx.translate((Math.random() - 0.5) * 24 * shake, (Math.random() - 0.5) * 24 * shake);
@@ -236,10 +282,11 @@ export function createRenderer(canvas) {
     zoneFade = Math.min(1, zoneFade + dt * 0.6);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(clouds[zonePrev], -20, -20, W + 40, H + 40);
+    // A column shows its own part of the one nebula behind the whole screen.
+    ctx.drawImage(A.clouds[zonePrev], bx / 2, 0, W / 2, H / 2, -20, -20, W + 40, H + 40);
     if (zoneFade > 0) {
       ctx.globalAlpha = zoneFade;
-      ctx.drawImage(clouds[zoneNow], -20, -20, W + 40, H + 40);
+      ctx.drawImage(A.clouds[zoneNow], bx / 2, 0, W / 2, H / 2, -20, -20, W + 40, H + 40);
     }
     // Far stars, two depths.
     for (let layer = 0; layer < 2; layer++) {
@@ -323,8 +370,10 @@ export function createRenderer(canvas) {
         continue;
       }
       const k = multi ? PC[i] : zoneNow;
+      // Racing, everybody else is a ghost in this sky (see the header).
+      const fade = g.race && i !== o.mine ? 0.3 : 1;
       ctx.strokeStyle = ACCENT[k];
-      if (c.tether) {
+      if (c.tether && fade === 1) {
         ctx.lineCap = 'round';
         for (let pass = 0; pass < 2; pass++) {
           ctx.globalAlpha = pass ? 0.9 : 0.25;
@@ -344,14 +393,14 @@ export function createRenderer(canvas) {
       for (let j = 1; j < tailN[i]; j++) {
         const a = (tailI[i] - j + TN) % TN, b = (tailI[i] - j - 1 + TN) % TN;
         const f = 1 - j / tailN[i];
-        ctx.globalAlpha = f * 0.8;
+        ctx.globalAlpha = f * 0.8 * fade;
         ctx.lineWidth = (1 + 9 * f) * s;
         ctx.beginPath();
         ctx.moveTo(X(tail[T + a * 2]), Y(tail[T + a * 2 + 1]));
         ctx.lineTo(X(tail[T + b * 2]), Y(tail[T + b * 2 + 1]));
         ctx.stroke();
       }
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = fade;
       sprite(glow[k], X(c.x), Y(c.y), 34 * s);
       sprite(glowWhite, X(c.x), Y(c.y), 16 * s);
       // Online, several comets may circle one star: a ring says which is yours.
@@ -415,12 +464,46 @@ export function createRenderer(canvas) {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#eef2ff';
     ctx.font = `800 34px ${FONT}`;
-    ctx.fillText(String(score(g)), pad, pad);
-    ctx.font = `600 13px ${FONT}`;
-    ctx.fillStyle = 'rgba(200,210,240,0.7)';
-    ctx.fillText(t('hud.line', metres(g), o.best), pad, pad + 40);
+    const r = g.race;
+    if (r) {
+      // Racing: the height is the score, then the clock, red for the last ten.
+      ctx.fillText(`${metres(g)} m`, pad, pad);
+      const secs = Math.ceil(Math.min(r.left, RACE));
+      ctx.font = `700 20px ${FONT}`;
+      ctx.fillStyle = secs <= 10 ? 'rgb(255,120,140)' : 'rgba(200,210,240,0.85)';
+      ctx.fillText(`${Math.floor(secs / 60)}:${secs % 60 < 10 ? '0' : ''}${secs % 60}`, pad, pad + 40);
+      // Online there is no other column to glance at: everyone's height.
+      let racers = 0;
+      for (const c of g.comets) if (c.status !== 'none') racers++;
+      if (!o.box && racers > 1) {
+        ctx.font = `700 14px ${FONT}`;
+        let y = pad + 70;
+        for (let i = 0; i < g.comets.length; i++) {
+          if (g.comets[i].status === 'none') continue;
+          ctx.fillStyle = ACCENT[PC[i]];
+          ctx.fillText(`● ${r.metres[i]} m`, pad, y);
+          y += 19;
+        }
+      }
+    } else {
+      ctx.fillText(String(score(g)), pad, pad);
+      ctx.font = `600 13px ${FONT}`;
+      ctx.fillStyle = 'rgba(200,210,240,0.7)';
+      ctx.fillText(t('hud.line', metres(g), o.best), pad, pad + 40);
+    }
 
     ctx.textAlign = 'center';
+    // The countdown, in the middle of every racer's sky, then "Go!" fading.
+    const count = r ? r.left - RACE : -1;
+    if (count > -0.8 && alive) {
+      ctx.textBaseline = 'middle';
+      ctx.globalAlpha = count > 0 ? 1 - (Math.ceil(count) - count) * 0.6 : 1 + count / 0.8;
+      ctx.font = `800 ${Math.min(110, W / 3)}px ${FONT}`;
+      ctx.fillStyle = ACCENT[multi && o.mine >= 0 ? PC[o.mine] : zoneNow];
+      ctx.fillText(count > 0 ? String(Math.ceil(count)) : t('race.go'), W / 2, H * 0.42);
+      ctx.globalAlpha = 1;
+      ctx.textBaseline = 'top';
+    }
     // The zone banner: the height just passed, in the new colour.
     if (banner > 0) {
       banner -= dt;
@@ -456,12 +539,24 @@ export function createRenderer(canvas) {
     const c = g.comets[o.mine < 0 ? 0 : o.mine];
     let key = null;
     if (!alive || !c) key = null;
-    else if (c.status === 'out') key = 'hint.out';
-    else if (g.grabs < 2 || (multi && c.status === 'parked')) key = c.status === 'parked' ? 'hint.hold' : c.tether ? 'hint.release' : 'hint.grab';
+    else if (c.status === 'out') key = r ? 'hint.back' : 'hint.out';
+    else if (g.grabs < 2 || ((multi || r) && c.status === 'parked')) key = c.status === 'parked' ? 'hint.hold' : c.tether ? 'hint.release' : 'hint.grab';
     if (key) {
-      ctx.font = `700 ${W < 500 ? 17 : 20}px ${FONT}`;
+      ctx.font = `700 ${W < 360 ? 14 : W < 500 ? 17 : 20}px ${FONT}`;
       ctx.fillStyle = 'rgba(238,242,255,0.92)';
       ctx.fillText(t(key), W / 2, H - 64 - bob);
+      // A column's key, on a keyboard (main.js KEYS).
+      if (o.key && c.status === 'parked') {
+        ctx.font = `600 13px ${FONT}`;
+        ctx.fillText(o.key, W / 2, H - 40 - bob);
+      }
+    }
+    // Racing with others: a bar of this player's colour along the bottom.
+    if (r && multi && c) {
+      ctx.fillStyle = ACCENT[PC[o.mine]];
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(6, H - 5, W - 12, 3);
+      ctx.globalAlpha = 1;
     }
   }
 

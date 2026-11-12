@@ -11,9 +11,11 @@
  *            pictures' names under them, Clear and Join
  *   room     where a host and a guest end up in the same place: the code as
  *            three big pictures with their names, and the four seats, each
- *            in its comet's colour. Play for the host; a guest is told it
- *            waits. Nobody has to wait for anybody: a guest that arrives
- *            after Play drops into the run (js/net/host.js).
+ *            in its comet's colour, and the Mode row: Together or Race,
+ *            the host's to choose (it starts as the start screen's), shown
+ *            to a guest with its buttons off. Play for the host; a guest is
+ *            told it waits. Nobody has to wait for anybody: a guest that
+ *            arrives after Play drops into the run (js/net/host.js).
  *
  * BACK IS ONE STEP (hub §2): code -> choose, room -> leave the room ->
  * choose, choose -> the start screen. Escape is the same button (main.js).
@@ -40,6 +42,7 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
   let pending = 0; // bumped on every Back, so a late-arriving session is let go
   let status = null; // { key, args, warn }
   let unwatch = null;
+  let race = false; // the start screen's Mode, which a new room starts with
 
   function setStatus(key, args = [], warn = false) {
     status = key ? { key, args, warn } : null;
@@ -62,6 +65,10 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
       $('room-words').textContent = codeWords(session.code);
       $('room-wait').hidden = session.kind === 'host';
       $('room-start').hidden = session.kind !== 'host';
+      for (const b of $('room-mode').children) {
+        b.setAttribute('aria-pressed', String((b.dataset.race === '1') === !!session.race));
+        b.disabled = !session.setRace;
+      }
       paintSeats();
     }
     if (step === 'code') paintPad();
@@ -166,7 +173,7 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
     setStatus('status.opening');
     for (const b of [$('online-host'), $('online-join')]) b.disabled = true;
     try {
-      const s = await hostSession(shape());
+      const s = await hostSession({ ...shape(), race });
       if (token !== pending) return s.leave();
       adopt(s);
       go('room');
@@ -222,6 +229,7 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
   });
   $('code-go').addEventListener('click', join);
   $('room-start').addEventListener('click', () => session && session.startMatch && session.startMatch());
+  for (const b of $('room-mode').children) b.addEventListener('click', () => session?.setRace?.(b.dataset.race === '1'));
   $('online-back').addEventListener('click', back);
 
   /* One step back; from the first step, the start screen. */
@@ -246,7 +254,8 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
   });
 
   return {
-    open() {
+    open(r = false) {
+      race = r;
       setStatus(null);
       go('choose');
     },

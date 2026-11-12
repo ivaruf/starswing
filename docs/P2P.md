@@ -17,6 +17,13 @@ document for signalling, the PeerJS broker and what that third party sees.
   bytes, 60 a second, on the lossy lane. No deltas and no roster version, so a
   guest that joins at 800 m is whole on the first frame it decodes, and what
   it decodes is drawn by the same `render.js` that draws a local game.
+- **A race sends each seat its own sky.** The host's worker runs one game per
+  seat, all grown from one seed (`sim.js` RACE), and each peer is sent the
+  frame of its own game: its comet whole, everyone else's in the other comet
+  slots as ghosts with no star (theirs are not in this list), plus the clock
+  and every seat's height in the head. Its events go to it alone. The head
+  grew for this, so `NET_VERSION` is 2 and a build without races is refused
+  with "a different version".
 - **A guest sends one bit**: whether its button is down, with a sequence
   number, 60 times a second. It cannot claim a position, a star or a score.
 - **Joining late is the game's own rule.** A seat taken mid-run gets a comet

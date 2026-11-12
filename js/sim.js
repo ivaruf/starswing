@@ -33,10 +33,21 @@
  * laggard the camera leaves behind, which is what keeps everyone in one
  * picture. With one comet every rule here is the solo game it was.
  *
+ * RACE (createRace, stepRace). Up to SEATS players against each other and a
+ * clock: a COUNT-second countdown, then RACE seconds, and the highest climb
+ * wins. Each player flies a game of their own, with its own camera, creep and
+ * dust, but every one of those skies is grown from ONE SEED, so the stars are
+ * the same for everyone and the race is fair. Lives never run out: a comet
+ * that is lost goes back to the star it fell off, parked, while the camera
+ * walks back down to it, and the RESPAWN seconds that takes are what a fall
+ * costs. `views[i]` is game i seen with everyone's comets in it, the others
+ * as ghosts (js/render.js), which is also exactly what goes on the wire.
+ *
  * g.status is 'parked' while no comet is in play (no creep), 'play', 'over'.
  * A comet's own status is 'none' (empty seat), 'parked', 'play' or 'out'.
  *
- * Math.random throughout: no run needs to replay (hub §10).
+ * Math.random, except a race's sky, which is seeded because every player
+ * must get the same one (hub §10).
  *
  * Checked by tools/sim-smoke.mjs, which flies `autopilot` — the same bot
  * that plays behind the start screen.
@@ -46,24 +57,41 @@ export const TICK = 1 / 60;
 export const REACH = 240; // how far a hold can catch a star from
 export const SEATS = 4;
 export const ZONE = 2500; // units per zone: 250 m, a new colour and a harder sky
+export const RACE = 90; // seconds on a race's clock
+const COUNT = 3; // the countdown before it
+const RESPAWN = 2; // seconds a lost comet waits in a race: the price of a fall
 const G = 520; // gravity in free flight
 const SWING = 460; // the speed a swing settles at
 const RMIN = 46; // the tightest orbit
 const WALL = 16;
 
-const rand = (a, b) => a + Math.random() * (b - a);
+const rand = (g, a, b) => a + g.rnd() * (b - a);
+
+/* mulberry32: one seed, the same sky on every device and in every column. */
+function seeded(s) {
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 const alive = (c) => c.status === 'parked' || c.status === 'play';
 
-/* `seats`: which seats hold a comet, e.g. [true] solo, [true, true] for two. */
-export function createGame({ w = 600, view = 900, seats = [true] } = {}) {
+/* `seats`: which seats hold a comet, e.g. [true] solo, [true, true] for two.
+ * `seed` grows the sky from a seed, `respawn` brings a lost comet back on its
+ * own star instead of a friend's: both are a race's (see the header). */
+export function createGame({ w = 600, view = 900, seats = [true], seed = 0, respawn = false } = {}) {
   const first = { x: w / 2, y: view * 0.36, bx: w / 2, amp: 0, ph: 0, dark: false, lit: true };
   const n = seats.filter(Boolean).length || 1;
   let k = 0;
   const g = {
     w, view,
     t: 0,
+    rnd: seed ? seeded(seed) : Math.random,
+    respawn,
     status: 'parked', // parked | play | over
     // Everyone starts on the first star, spread evenly round its orbit.
     comets: seats.map((on) => {
@@ -105,17 +133,17 @@ export const score = (g) => metres(g) + g.dustN * 5;
 function grow(g) {
   while (g.genY < g.camY + g.view + 500) {
     const z = Math.max(0, Math.floor((g.genY - g.base) / ZONE));
-    const dy = 140 + 12 * Math.min(z, 4) + rand(0, 50);
-    const hx = rand(50, g.w - 50);
-    let clear = z >= 1 && Math.random() < Math.min(0.5, 0.18 * z);
+    const dy = 140 + 12 * Math.min(z, 4) + rand(g, 0, 50);
+    const hx = rand(g, 50, g.w - 50);
+    let clear = z >= 1 && g.rnd() < Math.min(0.5, 0.18 * z);
     const row = [];
     for (const lane of g.lanes) {
-      const x = clamp(lane.x + rand(-260, 260), lane.lo, lane.hi);
+      const x = clamp(lane.x + rand(g, -260, 260), lane.lo, lane.hi);
       if (Math.abs(hx - x) < 130 || Math.abs(hx - lane.x) < 130 || Math.abs(hx - (x + lane.x) / 2) < 150) clear = false;
-      const drift = z >= 2 && Math.random() < Math.min(0.5, 0.2 * (z - 1));
-      row.push({ x, y: g.genY + dy, bx: x, amp: drift ? rand(40, 90) : 0, ph: rand(0, 6.28), dark: false, lit: false });
+      const drift = z >= 2 && g.rnd() < Math.min(0.5, 0.2 * (z - 1));
+      row.push({ x, y: g.genY + dy, bx: x, amp: drift ? rand(g, 40, 90) : 0, ph: rand(g, 0, 6.28), dark: false, lit: false });
       // Dust, bowed a little off the straight line between the two stars.
-      const bow = rand(-50, 50);
+      const bow = rand(g, -50, 50);
       for (let i = 1; i <= 3; i++) {
         const f = i / 4;
         g.dust.push({ x: lane.x + (x - lane.x) * f + bow * Math.sin(f * Math.PI), y: g.genY + dy * f, taken: false });
@@ -143,17 +171,19 @@ export function target(g, c = g.comets[0]) {
   return best;
 }
 
-/* Comet `who` is lost: out for a moment if a friend is still up, else the end. */
+/* Comet `who` is lost: out for a moment if a friend is still up (or, racing,
+ * always), else the end. Racing, `last` becomes the star it comes back on. */
 function die(g, c, who) {
   c.status = 'out';
+  if (g.respawn) c.last = c.tether || c.last;
   c.tether = null;
-  c.wait = 1;
+  c.wait = g.respawn ? RESPAWN : 1;
   settle(g, { who, x: c.x, y: c.y });
 }
 
 function settle(g, e) {
   if (g.status === 'over') return;
-  const left = g.comets.some(alive);
+  const left = g.respawn || g.comets.some(alive);
   if (!left) g.status = 'over';
   g.events.push({ type: left ? 'out' : 'over', ...e });
 }
@@ -166,16 +196,20 @@ function rejoin(g, c, who) {
   }
   if (!host) return;
   const j = g.comets.indexOf(host);
-  c.status = 'parked';
-  c.tether = host.tether;
-  c.last = null;
-  c.r = c.rT = 90;
   c.dir = host.dir;
-  c.speed = SWING;
-  c.chain = 0;
   // A quarter turn per seat apart, so two that come back together do not overlap.
   c.ang = host.ang + ((who - j + SEATS) % SEATS) * (Math.PI / 2);
-  g.events.push({ type: 'join', who, x: c.tether.x, y: c.tether.y });
+  land(g, c, who, host.tether);
+}
+
+function land(g, c, who, s) {
+  c.status = 'parked';
+  c.tether = s;
+  c.last = null;
+  c.r = c.rT = 90;
+  c.speed = SWING;
+  c.chain = 0;
+  g.events.push({ type: 'join', who, x: s.x, y: s.y });
 }
 
 /* A seat taken or left mid-run (online). A new comet arrives like a lost one. */
@@ -209,7 +243,13 @@ export function step(g, dt, holds) {
     const hold = !!holds[who];
     if (c.status === 'none') continue;
     if (c.status === 'out') {
-      if ((c.wait -= dt) <= 0) rejoin(g, c, who);
+      if (g.respawn) {
+        // Racing: the camera walks back down to the star it fell off (a seat
+        // that never flew has none, and starts on the first star).
+        const s = c.last || g.stars[0];
+        g.camY += (s.y - Math.min(g.view * 0.45, 420) - g.camY) * Math.min(1, 4 * dt);
+        if ((c.wait -= dt) <= 0) land(g, c, who, s);
+      } else if ((c.wait -= dt) <= 0) rejoin(g, c, who);
       continue;
     }
     if (c.status === 'parked' && hold) c.status = 'play';
@@ -302,8 +342,9 @@ export function step(g, dt, holds) {
     }
   }
 
-  // Forget what has scrolled away. A tethered star is never that far down.
-  while (g.stars.length && g.stars[0].y < g.camY - 320 && !g.comets.some((c) => c.tether === g.stars[0])) g.stars.shift();
+  // Forget what has scrolled away, but never a star a comet holds or last
+  // left: a racer comes back on that one.
+  while (g.stars.length && g.stars[0].y < g.camY - 320 && !g.comets.some((c) => c.tether === g.stars[0] || c.last === g.stars[0])) g.stars.shift();
   while (g.dust.length && g.dust[0].y < g.camY - 60) g.dust.shift();
   grow(g);
 }
@@ -335,4 +376,42 @@ export function autopilot(g) {
     if (Math.hypot(aim.x - x, aim.y - y) < 110) return false;
   }
   return true;
+}
+
+/*
+ * A race (see the header): one game per seat, all from one seed. `seats` as
+ * createGame's: locally one per player, online always SEATS so that a guest
+ * who arrives mid-race has a sky waiting, in step with everyone else's.
+ */
+export function createRace({ w, view, seats }) {
+  const seed = 1 + Math.floor(Math.random() * 0x7ffffffe);
+  const games = seats.map((on) => createGame({ w, view, seats: [on], seed, respawn: true }));
+  const comets = games.map((g) => g.comets[0]);
+  // Shared and updated in place by stepRace, so every view reads it live.
+  const info = { left: RACE + COUNT, metres: games.map(() => 0) };
+  // Game i with everyone's comets in it: prototype reads keep it live.
+  const views = games.map((g) => Object.create(g, { comets: { value: comets }, race: { value: info } }));
+  return { games, views, info, t: -COUNT, status: 'play' };
+}
+
+const one = [false];
+
+/* One tick of every game. Events keep to their own game, with `who` set to
+ * the seat. The clock running out ends every game with an 'over'. */
+export function stepRace(r, dt, holds) {
+  r.t += dt;
+  const end = r.status === 'play' && r.t >= RACE;
+  for (let i = 0; i < r.games.length; i++) {
+    const g = r.games[i];
+    one[0] = r.t > 0 && !!holds[i]; // nobody leaves before the countdown does
+    step(g, dt, one);
+    if (end && g.status !== 'over') {
+      g.status = 'over';
+      g.events.push({ type: 'over', x: g.comets[0].x, y: g.comets[0].y });
+    }
+    for (const e of g.events) e.who = i;
+    r.info.metres[i] = metres(g);
+  }
+  if (end) r.status = 'over';
+  r.info.left = Math.max(0, RACE - r.t);
 }
