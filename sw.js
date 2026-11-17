@@ -20,7 +20,7 @@
 // All paths are RELATIVE: the game is served from /<slug>/ and is also framed
 // by the arcade from a sibling directory.
 
-const VERSION = 'v0.4.0'; // one life: race with no clock and no respawn, the highest climb when the last one falls wins
+const VERSION = 'v0.4.1'; // look only in our own cache, say Unmute, and no crash bar for a picture that fails to load
 const PREFIX = 'starswing-';
 const CACHE = `${PREFIX}${VERSION}`;
 
@@ -105,7 +105,9 @@ self.addEventListener('fetch', (event) => {
   // never be from different builds. New versions arrive as a whole new cache through
   // install/activate above, never file by file.
   event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((hit) => {
+    // This cache only: a bare match searches every game's on the shared origin,
+    // and could serve ../arcade/exit.js from the arcade's (maxgear/sw.js).
+    caches.match(request, { ignoreSearch: true, cacheName: CACHE }).then((hit) => {
       if (hit) return hit;
       return fetch(request).then((res) => {
         if (res.ok && res.type === 'basic') {
@@ -113,7 +115,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE).then((c) => c.put(request, copy));
         }
         return res;
-      }).catch(() => (request.mode === 'navigate' ? caches.match('./index.html') : undefined));
+      }).catch(() => (request.mode === 'navigate' ? caches.match('./index.html', { cacheName: CACHE }) : undefined));
     })
   );
 });

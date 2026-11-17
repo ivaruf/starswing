@@ -161,7 +161,7 @@ const STRINGS = {
     'sfx': 'Effects',
     'sound.hint': 'Every new star you catch plays one note higher.',
     'mute': 'Mute',
-    'unmute': 'Sound on',
+    'unmute': 'Unmute',
     'language': 'Language',
     'exit.arcade': 'Back to arcade',
     'exit.close': 'Close',

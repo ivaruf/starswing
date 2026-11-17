@@ -73,7 +73,7 @@ hidden, which is expected.
 | `js/render.js` | the canvas: sky, glow, sparks, HUD, a race's ghosts and columns; picks the field for the screen |
 | `js/main.js` | the loop, the buttons (one, or one per strip), the states, Escape, the best score |
 | `js/lobby.js` | the Online card: create or join a room, the picture keypad, the seats |
-| `js/net/` | protocol (the frame on the wire), host and its worker, guest; `codes`, `rendezvous` and `webrtc` are geometry_pong's unchanged |
+| `js/net/` | protocol (the frame on the wire), host and its worker, guest; `codes` is geometry_pong's, `rendezvous` and `webrtc` NeonFox's (the copies with the TURN relay) |
 | `js/ui.js` | cards, the corner's menu and mute, the way back to the arcade |
 | `js/audio.js` | two buses, mute, the composed cues and the loop |
 | `js/i18n.js` | bokmål and English |

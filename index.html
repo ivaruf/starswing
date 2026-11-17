@@ -288,6 +288,8 @@
           "error",
           function (e) {
             var t = e.target;
+            // A picture or a stylesheet that fails to load is not a crash.
+            if (t && t !== window && t.tagName !== "SCRIPT") return;
             if (t && t.tagName === "SCRIPT" && t.dataset && t.dataset.handled) return;
             if (t && t.tagName === "SCRIPT") {
               show(w().load + t.src + w().hint);
