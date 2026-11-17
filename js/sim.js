@@ -43,6 +43,11 @@
  * costs. `views[i]` is game i seen with everyone's comets in it, the others
  * as ghosts (js/render.js), which is also exactly what goes on the wire.
  *
+ * ONE LIFE (createRace's `life`) is the same race with no clock and no way
+ * back: a comet's first fall stops its sky where it is, and the run ends when
+ * the last one falls. The highest climb still wins, so falling first is not
+ * losing until whoever is left has climbed past you.
+ *
  * g.status is 'parked' while no comet is in play (no creep), 'play', 'over'.
  * A comet's own status is 'none' (empty seat), 'parked', 'play' or 'out'.
  *
@@ -383,24 +388,26 @@ export function autopilot(g) {
  * createGame's: locally one per player, online always SEATS so that a guest
  * who arrives mid-race has a sky waiting, in step with everyone else's.
  */
-export function createRace({ w, view, seats }) {
+export function createRace({ w, view, seats, life = false }) {
   const seed = 1 + Math.floor(Math.random() * 0x7ffffffe);
   const games = seats.map((on) => createGame({ w, view, seats: [on], seed, respawn: true }));
   const comets = games.map((g) => g.comets[0]);
   // Shared and updated in place by stepRace, so every view reads it live.
-  const info = { left: RACE + COUNT, metres: games.map(() => 0) };
+  const info = { left: RACE + COUNT, life, metres: games.map(() => 0) };
   // Game i with everyone's comets in it: prototype reads keep it live.
   const views = games.map((g) => Object.create(g, { comets: { value: comets }, race: { value: info } }));
-  return { games, views, info, t: -COUNT, status: 'play' };
+  return { games, views, info, life, t: -COUNT, status: 'play' };
 }
 
 const one = [false];
 
 /* One tick of every game. Events keep to their own game, with `who` set to
- * the seat. The clock running out ends every game with an 'over'. */
+ * the seat. The clock running out, or with one life the last fall, ends
+ * every game with an 'over', so every seat (online, every device) hears it. */
 export function stepRace(r, dt, holds) {
   r.t += dt;
-  const end = r.status === 'play' && r.t >= RACE;
+  let end = !r.life && r.status === 'play' && r.t >= RACE;
+  let fell = false;
   for (let i = 0; i < r.games.length; i++) {
     const g = r.games[i];
     one[0] = r.t > 0 && !!holds[i]; // nobody leaves before the countdown does
@@ -409,9 +416,24 @@ export function stepRace(r, dt, holds) {
       g.status = 'over';
       g.events.push({ type: 'over', x: g.comets[0].x, y: g.comets[0].y });
     }
-    for (const e of g.events) e.who = i;
+    for (const e of g.events) {
+      e.who = i;
+      // One life: the first 'out' (a fall, or a seat that left) is the last.
+      if (r.life && e.type === 'out' && g.status !== 'over') {
+        g.status = 'over';
+        fell = true;
+      }
+    }
     r.info.metres[i] = metres(g);
   }
+  if (fell && !r.games.some((g) => g.status !== 'over' && g.comets[0].status !== 'none')) {
+    end = true;
+    r.games.forEach((g, i) => {
+      g.status = 'over';
+      g.events.push({ type: 'over', who: i, x: g.comets[0].x, y: g.comets[0].y });
+    });
+  }
   if (end) r.status = 'over';
-  r.info.left = Math.max(0, RACE - r.t);
+  // One life has no clock: `left` runs only the countdown and Go!'s fade.
+  r.info.left = Math.max(r.life ? RACE - 1 : 0, RACE - r.t);
 }

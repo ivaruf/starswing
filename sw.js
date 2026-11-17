@@ -20,7 +20,7 @@
 // All paths are RELATIVE: the game is served from /<slug>/ and is also framed
 // by the arcade from a sibling directory.
 
-const VERSION = 'v0.3.0'; // race: 1-4 players against a 90 s clock, a column each on one screen or one sky each online
+const VERSION = 'v0.4.0'; // one life: race with no clock and no respawn, the highest climb when the last one falls wins
 const PREFIX = 'starswing-';
 const CACHE = `${PREFIX}${VERSION}`;
 

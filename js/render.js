@@ -22,7 +22,9 @@
  * RACE (sim.js header). `g.race` holds the clock and every seat's height, and
  * the comet that is not `o.mine` is a ghost: faint, no beam, no target, the
  * same stars underneath it because every racer's sky grows from one seed. The
- * HUD is the height, the clock, and, online, where everybody else is. On one
+ * HUD is the height, the clock (none with one life, where a spent sky says
+ * "Out" until the last one falls), and, online, where everybody else is, the
+ * fallen faint. On one
  * screen main.js runs one renderer per player, each drawing its own column
  * (`o.box`); the baked pictures are shared between them.
  *
@@ -471,19 +473,21 @@ export function createRenderer(canvas) {
       const secs = Math.ceil(Math.min(r.left, RACE));
       ctx.font = `700 20px ${FONT}`;
       ctx.fillStyle = secs <= 10 ? 'rgb(255,120,140)' : 'rgba(200,210,240,0.85)';
-      ctx.fillText(`${Math.floor(secs / 60)}:${secs % 60 < 10 ? '0' : ''}${secs % 60}`, pad, pad + 40);
+      if (!r.life) ctx.fillText(`${Math.floor(secs / 60)}:${secs % 60 < 10 ? '0' : ''}${secs % 60}`, pad, pad + 40);
       // Online there is no other column to glance at: everyone's height.
       let racers = 0;
       for (const c of g.comets) if (c.status !== 'none') racers++;
       if (!o.box && racers > 1) {
         ctx.font = `700 14px ${FONT}`;
-        let y = pad + 70;
+        let y = pad + (r.life ? 46 : 70);
         for (let i = 0; i < g.comets.length; i++) {
           if (g.comets[i].status === 'none') continue;
           ctx.fillStyle = ACCENT[PC[i]];
+          ctx.globalAlpha = g.comets[i].status === 'out' ? 0.45 : 1;
           ctx.fillText(`● ${r.metres[i]} m`, pad, y);
           y += 19;
         }
+        ctx.globalAlpha = 1;
       }
     } else {
       ctx.fillText(String(score(g)), pad, pad);
@@ -502,6 +506,13 @@ export function createRenderer(canvas) {
       ctx.fillStyle = ACCENT[multi && o.mine >= 0 ? PC[o.mine] : zoneNow];
       ctx.fillText(count > 0 ? String(Math.ceil(count)) : t('race.go'), W / 2, H * 0.42);
       ctx.globalAlpha = 1;
+      ctx.textBaseline = 'top';
+    }
+    if (r && r.life && !alive) {
+      ctx.textBaseline = 'middle';
+      ctx.font = `800 ${Math.min(64, W / 5)}px ${FONT}`;
+      ctx.fillStyle = 'rgba(238,242,255,0.8)';
+      ctx.fillText(t('life.out'), W / 2, H * 0.42);
       ctx.textBaseline = 'top';
     }
     // The zone banner: the height just passed, in the new colour.

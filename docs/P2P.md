@@ -23,7 +23,9 @@ document for signalling, the PeerJS broker and what that third party sees.
   slots as ghosts with no star (theirs are not in this list), plus the clock
   and every seat's height in the head. Its events go to it alone. The head
   grew for this, so `NET_VERSION` is 2 and a build without races is refused
-  with "a different version".
+  with "a different version". One life is the same with no clock and a last
+  head byte saying so, `NET_VERSION` 3: the last fall pushes an 'over' into
+  every seat's game, so every device ends together.
 - **A guest sends one bit**: whether its button is down, with a sequence
   number, 60 times a second. It cannot claim a position, a star or a score.
 - **Joining late is the game's own rule.** A seat taken mid-run gets a comet

@@ -65,7 +65,7 @@ onmessage = ({ data }) => {
   switch (data.type) {
     // A run: new, or again, with whoever is seated now.
     case 'SETUP':
-      race = data.race ? createRace({ w: data.w, view: data.view, seats: data.seats }) : null;
+      race = data.race ? createRace({ w: data.w, view: data.view, seats: data.seats, life: data.race === 2 }) : null;
       game = race ? null : createGame({ w: data.w, view: data.view, seats: data.seats });
       holds.fill(false);
       last = performance.now();

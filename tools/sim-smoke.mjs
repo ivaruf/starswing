@@ -2,7 +2,8 @@
 // bot in a tall and a wide sky and asserts the game is climbable, that every
 // number stays finite, that a parked comet is safe, and that a comet nobody
 // catches falls out of the sky. Then the race: one sky for everyone, a fall
-// that costs time and never the run, and a clock that ends it.
+// that costs time and never the run, and a clock that ends it; with one life
+// the first fall ends a sky and the last one the run.
 import assert from 'node:assert/strict';
 import { packFrame, unpackFrame, packHold, unpackHold, cleanEvent } from '../js/net/protocol.js';
 import { createGame, createRace, step, stepRace, seat, autopilot, score, metres, park, TICK, RACE } from '../js/sim.js';
@@ -140,6 +141,24 @@ for (let i = 0; i < 60 * (RACE + 5); i++) {
 }
 assert.ok(r.info.metres[0] > 0);
 
+// One life: seat 0 falls and its sky stops, but the run goes on, with no
+// clock, until seat 1 falls too; then every sky hears 'over'.
+r = createRace({ w: 600, view: 1100, seats: [true, true], life: true });
+while (r.t <= 0) stepRace(r, TICK, [false, false]);
+stepRace(r, TICK, [true, false]);
+for (let i = 0; i < 60 * 10 && r.games[0].status !== 'over'; i++) stepRace(r, TICK, [false, false]);
+assert.equal(r.games[0].status, 'over', 'one fall ends that sky');
+assert.ok(!r.games[0].events.some((e) => e.type === 'over' || e.type === 'join'), 'but not the run, and nobody comes back');
+const spent = r.info.metres[0];
+for (let i = 0; i < 60 * (RACE + 5); i++) stepRace(r, TICK, [false, false]);
+assert.equal(r.status, 'play', 'one life has no clock');
+assert.equal(unpackFrame(packFrame(r.views[0], 9)).race.life, true);
+stepRace(r, TICK, [false, true]);
+for (let i = 0; i < 60 * 10 && r.status !== 'over'; i++) stepRace(r, TICK, [false, false]);
+assert.equal(r.status, 'over', 'the last fall ends it');
+assert.ok(r.games.every((k) => k.status === 'over' && k.events.some((e) => e.type === 'over')));
+assert.equal(r.info.metres[0], spent);
+
 // A seat's race frame: its own sky, the others as ghosts, the clock, the heights.
 r = createRace({ w: 600, view: 1300, seats: [true, true, false, true] });
 for (let i = 0; i < 60 * 20; i++) {
@@ -148,6 +167,7 @@ for (let i = 0; i < 60 * 20; i++) {
 }
 const f = unpackFrame(packFrame(r.views[1], 9));
 assert.ok(f.race && Math.abs(f.race.left - r.info.left) < 0.06);
+assert.equal(f.race.life, false);
 assert.deepEqual(f.race.metres, r.info.metres);
 assert.equal(f.comets[2].status, 'none');
 assert.ok(f.comets[0].status !== 'none' && !f.comets[0].tether, 'a ghost holds no star in this sky');

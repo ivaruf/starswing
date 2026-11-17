@@ -23,10 +23,11 @@
  *          device's button goes up each screen frame, and sounds and sparks
  *          come from the host's relayed events.
  *
- * TOGETHER OR A RACE, whichever the start screen's Mode row says (the room's,
- * online). A race on this device (`race`, sim.js RACE) is one sim per player
- * and one renderer per player, each drawing a column of the glass, which is
- * the same strip that player's finger already owns. Online a race is the
+ * TOGETHER, A RACE OR ONE LIFE, whichever the start screen's Mode row says
+ * (the room's, online). A race on this device (`race`, sim.js RACE, ONE LIFE)
+ * is one sim per player and one renderer per player, each drawing a column of
+ * the glass, which is the same strip that player's finger already owns. One
+ * life alone is the solo game, which already is one. Online a race is the
  * host's: this device draws its own seat's sky, as ever.
  *
  * THE LOOP. sim.js's 60 Hz TICK with an accumulator, frame dt clamped to
@@ -67,7 +68,7 @@ try {
 let state = 'attract';
 let mode = 'solo';
 let players = 1;
-let racing = false; // the start screen's Mode row
+let racing = 0; // the start screen's Mode row: together, race, one life
 let net = null; // the online session whose run is in the sky
 let race = null; // a race on this device; `game` is unused while there is one
 let game = createGame(shape());
@@ -151,7 +152,7 @@ function startGame() {
   net = null;
   mode = players > 1 ? 'local' : 'solo';
   const seats = new Array(players).fill(true);
-  race = racing ? createRace({ ...shape(innerWidth / players, innerHeight), seats }) : null;
+  race = racing === 1 || (racing === 2 && players > 1) ? createRace({ ...shape(innerWidth / players, innerHeight), seats, life: racing === 2 }) : null;
   if (!race) game = createGame({ ...shape(), seats });
   while (renderers.length < players) renderers.push(createRenderer(canvas));
   begin();
@@ -228,7 +229,7 @@ function gameOver() {
   audio.end(record);
   const result = {
     points, metres: metres(g), dust: g.dustN, best, record, team: mode !== 'solo', online: !!session, canAgain: !session || !!session.startMatch,
-    race: g.race ? standings(g) : null, mine: session ? session.seat : -1,
+    race: g.race ? standings(g) : null, life: !!g.race?.life, mine: session ? session.seat : -1,
   };
   const show = () => {
     if (state !== 'over' || net !== session || (!session && (race || game) !== run)) return;

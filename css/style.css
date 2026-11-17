@@ -354,6 +354,13 @@ input[type="range"]:focus-visible {
   gap: 8px;
   cursor: pointer;
 }
+/* Three modes share the row a caption leaves: "Kappløp" fills a sideways
+ * phone's pill at the size the rest use. */
+#mode .seg-btn,
+#room-mode .seg-btn {
+  padding: 0 2px;
+  font-size: 0.85rem;
+}
 /* A guest's view of the host's choice: the choice stays lit. */
 .seg-btn:disabled {
   cursor: default;

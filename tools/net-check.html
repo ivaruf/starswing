@@ -16,6 +16,7 @@
   ?race makes the run a race (sim.js RACE): the host picks Race in the room
   and the guest must see it picked. Then each sky is its own, with the other
   comet a faint ghost in it, and a lost comet comes back on its own star.
+  ?life is the same with One life: a lost comet's sky says "Out" and stays.
 
   Headless Chrome needs --disable-features=WebRtcHideLocalIpsWithMdns, or its
   mDNS-hidden local addresses never resolve and the guest is told the host
@@ -64,9 +65,10 @@
     $(B, '#code-go').click();
     await until('guest is in the room', () => !$(B, '#online-room').hidden);
     await until('host sees the guest', () => A.contentDocument.querySelectorAll('#room-seats .seat:not(.bot)').length === 2);
-    if (q.has('race')) {
-      $(A, '#room-mode-race').click();
-      await until('the guest sees the race', () => $(B, '#room-mode-race').getAttribute('aria-pressed') === 'true' && $(B, '#room-mode-race').disabled);
+    const pick = q.has('race') ? '#room-mode-race' : q.has('life') ? '#room-mode-life' : null;
+    if (pick) {
+      $(A, pick).click();
+      await until('the guest sees the mode', () => $(B, pick).getAttribute('aria-pressed') === 'true' && $(B, pick).disabled);
     }
     $(A, '#room-start').click();
     await until('both skies are up', () => $(A, '#online').hidden && $(B, '#online').hidden);

@@ -35,7 +35,7 @@ import { hostRendezvous } from './rendezvous.js';
 import { newCode } from './codes.js';
 import { SEATS } from '../sim.js';
 
-export async function hostSession({ w, view, race = false }) {
+export async function hostSession({ w, view, race = 0 }) {
   const code = newCode();
   const seats = Array.from({ length: SEATS }, (_, i) => (i === 0 ? 'host' : 'open'));
 
@@ -172,9 +172,10 @@ export async function hostSession({ w, view, race = false }) {
     worker.postMessage({ type: 'HOLD', seat: 0, hold });
   };
 
-  /* Together or a race, for the next run: the room card's Mode row. */
-  session.setRace = (on) => {
-    session.race = !!on;
+  /* Together (0), a race (1) or one life (2), for the next run: the room
+   * card's Mode row. */
+  session.setRace = (n) => {
+    session.race = n;
     publishRoster();
   };
 

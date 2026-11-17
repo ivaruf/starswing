@@ -56,8 +56,9 @@
           <p class="tag" data-i18n="start.how">Hold for å gripe en stjerne og svinge rundt den. Slipp for å fly videre. Hvor høyt kommer du?</p>
         </div>
         <!-- How many share this screen: 1 is the solo game, 2 to 4 give each
-             player a strip of the glass (js/main.js). Then together or a
-             race, which Online takes into the room. For the visit only. -->
+             player a strip of the glass (js/main.js). Then together, a
+             race or one life, which Online takes into the room. For the
+             visit only. -->
         <div class="setup">
           <div class="lang-row">
             <span class="cap" id="players-cap" data-i18n="players">Spillere</span>
@@ -68,6 +69,7 @@
             <div class="seg" id="mode" role="group" aria-labelledby="mode-cap">
               <button type="button" class="seg-btn" id="mode-together" data-race="0" aria-pressed="true" data-i18n="mode.together">Sammen</button>
               <button type="button" class="seg-btn" id="mode-race" data-race="1" aria-pressed="false" data-i18n="mode.race">Kappløp</button>
+              <button type="button" class="seg-btn" id="mode-life" data-race="2" aria-pressed="false" data-i18n="mode.life">Ett liv</button>
             </div>
           </div>
         </div>
@@ -203,6 +205,7 @@
             <div class="seg" id="room-mode" role="group" aria-labelledby="room-mode-cap">
               <button type="button" class="seg-btn" id="room-mode-together" data-race="0" aria-pressed="true" data-i18n="mode.together">Sammen</button>
               <button type="button" class="seg-btn" id="room-mode-race" data-race="1" aria-pressed="false" data-i18n="mode.race">Kappløp</button>
+              <button type="button" class="seg-btn" id="room-mode-life" data-race="2" aria-pressed="false" data-i18n="mode.life">Ett liv</button>
             </div>
           </div>
           <button id="room-start" class="go" type="button" data-i18n="play" hidden>Spill</button>

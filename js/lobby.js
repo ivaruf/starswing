@@ -11,7 +11,8 @@
  *            pictures' names under them, Clear and Join
  *   room     where a host and a guest end up in the same place: the code as
  *            three big pictures with their names, and the four seats, each
- *            in its comet's colour, and the Mode row: Together or Race,
+ *            in its comet's colour, and the Mode row: Together, Race or
+ *            One life,
  *            the host's to choose (it starts as the start screen's), shown
  *            to a guest with its buttons off. Play for the host; a guest is
  *            told it waits. Nobody has to wait for anybody: a guest that
@@ -42,7 +43,7 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
   let pending = 0; // bumped on every Back, so a late-arriving session is let go
   let status = null; // { key, args, warn }
   let unwatch = null;
-  let race = false; // the start screen's Mode, which a new room starts with
+  let race = 0; // the start screen's Mode, which a new room starts with
 
   function setStatus(key, args = [], warn = false) {
     status = key ? { key, args, warn } : null;
@@ -66,7 +67,7 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
       $('room-wait').hidden = session.kind === 'host';
       $('room-start').hidden = session.kind !== 'host';
       for (const b of $('room-mode').children) {
-        b.setAttribute('aria-pressed', String((b.dataset.race === '1') === !!session.race));
+        b.setAttribute('aria-pressed', String(Number(b.dataset.race) === session.race));
         b.disabled = !session.setRace;
       }
       paintSeats();
@@ -229,7 +230,7 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
   });
   $('code-go').addEventListener('click', join);
   $('room-start').addEventListener('click', () => session && session.startMatch && session.startMatch());
-  for (const b of $('room-mode').children) b.addEventListener('click', () => session?.setRace?.(b.dataset.race === '1'));
+  for (const b of $('room-mode').children) b.addEventListener('click', () => session?.setRace?.(Number(b.dataset.race)));
   $('online-back').addEventListener('click', back);
 
   /* One step back; from the first step, the start screen. */
@@ -254,7 +255,7 @@ export function createLobby({ ui, onBegin, onLobby, onEvents, onClosed }) {
   });
 
   return {
-    open(r = false) {
+    open(r = 0) {
       race = r;
       setStatus(null);
       go('choose');

@@ -36,7 +36,7 @@ export async function joinSession({ code }) {
     mode: '',
     why: null,
     started: false,
-    race: false, // the host's choice, from the roster
+    race: 0, // the host's choice, from the roster: together, race, one life
     game: null,
     onRoster: null,
     onStatus: null,
@@ -70,7 +70,7 @@ export async function joinSession({ code }) {
           .filter((r) => r && Number.isInteger(r.seat) && r.seat >= 0 && r.seat < SEATS)
           .map((r) => ({ seat: r.seat, who: ['host', 'guest'].includes(r.who) ? r.who : 'open' }))
       : [];
-    session.race = value.race === true;
+    session.race = value.race === 1 || value.race === 2 ? value.race : 0;
     session.onRoster?.(session.roster);
   }
 

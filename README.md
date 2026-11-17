@@ -48,6 +48,11 @@ takes are what the fall cost.
   under its own. Someone who joins mid-race starts at the bottom with what is
   left of the clock.
 
+**One life** is the same race with no clock and no second go: your first
+fall stops your sky where it is, and the run ends when the last player falls.
+The highest climb still wins, so falling first only loses once someone still
+flying has climbed past you. Alone it is simply the solo game.
+
 ## Running it
 
 Serve the hub directory and open `/starswing/`:
@@ -81,13 +86,13 @@ geometry_pong's, cut to what this game has.
 ## Checks
 
 ```sh
-node tools/sim-smoke.mjs     # the bot climbs; a lost comet rejoins a friend; a race is fair and timed; a frame survives the wire
+node tools/sim-smoke.mjs     # the bot climbs; a lost comet rejoins a friend; a race is fair and timed; one life ends at the last fall; a frame survives the wire
 python3 tools/make-icons.py  # after changing the motif
 ```
 
 `tools/net-check.html`, opened through the hub's server, puts a host and a
 guest side by side and drives them through a room and a run (`?race` for a
-race). It is something to look at, not an assertion.
+race, `?life` for one life). It is something to look at, not an assertion.
 
 ## Sound
 

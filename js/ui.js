@@ -4,7 +4,7 @@
  * say; main.js decides when.
  *
  *   start  the wordmark, the Players row (1 to 4 on this screen), the Mode
- *          row (Together or Race, which Online takes into the room too),
+ *          row (Together, Race or One life, which Online takes into the room),
  *          Play, Online, the update button, and the way back to the arcade
  *          last
  *   menu   the one panel behind the three-bar plate. In a run it is the
@@ -72,11 +72,11 @@ export function createUI({ onPlay, onOnline, onResume, onRestart, onMainMenu, on
     $('players').appendChild(b);
   }
 
-  // Together or a race: two alternatives, for the visit only.
-  let race = false;
+  // Together (0), a race (1) or one life (2): alternatives, for the visit only.
+  let race = 0;
   for (const b of $('mode').children) {
     b.addEventListener('click', () => {
-      race = b.dataset.race === '1';
+      race = Number(b.dataset.race);
       for (const x of $('mode').children) x.setAttribute('aria-pressed', String(x === b));
     });
   }
@@ -149,7 +149,7 @@ export function createUI({ onPlay, onOnline, onResume, onRestart, onMainMenu, on
     const r = over.race;
     if (r && r.length < 2) {
       title.textContent = `${r[0] ? r[0].m : over.metres} m`;
-      $('over-score').textContent = t('over.inTime', RACE);
+      $('over-score').textContent = over.life ? '' : t('over.inTime', RACE);
     } else if (r) {
       // The winner in their own colour; a tie at the top is nobody's.
       const tie = r[0].m === r[1].m;
