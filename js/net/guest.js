@@ -59,6 +59,14 @@ export async function joinSession({ code }) {
     if (closed) return;
     closed = true;
     session.started = false;
+    // Refused or left behind: let the connection and the broker go too.
+    channel.onClose = null;
+    try {
+      channel.close();
+    } catch {
+      /* Already gone. */
+    }
+    joined.close?.();
     session.onClosed?.(why);
   };
 
@@ -121,10 +129,10 @@ export async function joinSession({ code }) {
   };
 
   /* This device's own button. */
-  session.setHold = (hold) => {
+  session.setHold = (hold, force = false) => {
     if (!session.started || !channel.open) return;
     const now = performance.now();
-    if (now - lastSent < SEND_EVERY) return;
+    if (!force && now - lastSent < SEND_EVERY) return;
     lastSent = now;
     seq = (seq + 1) & 0xffff;
     channel.send(packHold(seq, hold), true);

@@ -20,7 +20,7 @@
 // All paths are RELATIVE: the game is served from /<slug>/ and is also framed
 // by the arcade from a sibling directory.
 
-const VERSION = 'v0.4.1'; // look only in our own cache, say Unmute, and no crash bar for a picture that fails to load
+const VERSION = 'v0.4.2'; // one life ends when the last flyer falls, a hidden tab lets go online, the way out offline, calmer shake
 const PREFIX = 'starswing-';
 const CACHE = `${PREFIX}${VERSION}`;
 
@@ -115,7 +115,9 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE).then((c) => c.put(request, copy));
         }
         return res;
-      }).catch(() => (request.mode === 'navigate' ? caches.match('./index.html', { cacheName: CACHE }) : undefined));
+      // Offline, anything not in our cache may still be in a neighbour's: the
+      // arcade precaches ../arcade/exit.js, the way out, which we do not.
+      }).catch(() => (request.mode === 'navigate' ? caches.match('./index.html', { cacheName: CACHE }) : caches.match(request)));
     })
   );
 });

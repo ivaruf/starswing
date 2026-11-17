@@ -323,8 +323,13 @@ addEventListener('keydown', (e) => {
 
 // A tab put away mid-run pauses rather than dropping the comets unseen.
 // Online the room plays on, and so does the worker if we host.
+// Online a hidden tab lets go at once: no frame will run to say so later, and
+// a held button would keep the comet swinging on the host's screen.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && !net) pause();
+  if (document.visibilityState !== 'hidden') return;
+  if (!net) return pause();
+  clearInput();
+  net.setHold(false, true);
 });
 
 addEventListener('resize', () => {

@@ -141,11 +141,22 @@ for (let i = 0; i < 60 * (RACE + 5); i++) {
 }
 assert.ok(r.info.metres[0] > 0);
 
-// One life: seat 0 falls and its sky stops, but the run goes on, with no
-// clock, until seat 1 falls too; then every sky hears 'over'.
+// One life, where a seat that never took off cannot hold the run open: when
+// the only flyer falls, the idle seat is done at 0 m and the run ends.
 r = createRace({ w: 600, view: 1100, seats: [true, true], life: true });
 while (r.t <= 0) stepRace(r, TICK, [false, false]);
 stepRace(r, TICK, [true, false]);
+for (let i = 0; i < 60 * 10 && r.status !== 'over'; i++) stepRace(r, TICK, [false, false]);
+assert.equal(r.status, 'over', 'an idle seat does not keep a one-life run going');
+assert.equal(r.info.metres[1], 0);
+
+// One life: seat 0 falls and its sky stops, but the run goes on, with no
+// clock, while seat 1 (who has flown, and is parked by a menu resume) is up;
+// then seat 1 falls too, and every sky hears 'over'.
+r = createRace({ w: 600, view: 1100, seats: [true, true], life: true });
+while (r.t <= 0) stepRace(r, TICK, [false, false]);
+stepRace(r, TICK, [true, true]);
+park(r.games[1]);
 for (let i = 0; i < 60 * 10 && r.games[0].status !== 'over'; i++) stepRace(r, TICK, [false, false]);
 assert.equal(r.games[0].status, 'over', 'one fall ends that sky');
 assert.ok(!r.games[0].events.some((e) => e.type === 'over' || e.type === 'join'), 'but not the run, and nobody comes back');

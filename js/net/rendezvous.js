@@ -222,6 +222,7 @@ export async function hostRendezvous(code, onPeer) {
     // (NeonFox's rendezvous.js): left alone, PeerJS falls back on its own
     // public relay.
     const peer = new Peer(brokerId(code), { config: await iceConfig() });
+    // A peer that never opened still holds a socket to the broker.
     await waitFor(
       peer,
       20000,
@@ -229,7 +230,10 @@ export async function hostRendezvous(code, onPeer) {
         error.type === "unavailable-id"
           ? said("err.codeInUse")
           : said("err.matchFailed", error.type),
-    );
+    ).catch((error) => {
+      peer.destroy();
+      throw error;
+    });
     const signalling = brokerHostSignalling(peer);
     const rtc = hostOverWebRTC(signalling, onPeer);
 
@@ -363,6 +367,10 @@ export async function joinRendezvous(code) {
       ),
     );
     setTimeout(() => reject(said("err.noAnswer")), 20000);
+  }).catch((error) => {
+    // A mistyped code must not leave a socket and a heartbeat behind it.
+    peer.destroy();
+    throw error;
   });
   const signalling = brokerGuestSignalling(pipe);
   try {

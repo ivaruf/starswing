@@ -25,7 +25,9 @@ document for signalling, the PeerJS broker and what that third party sees.
   grew for this, so `NET_VERSION` is 2 and a build without races is refused
   with "a different version". One life is the same with no clock and a last
   head byte saying so, `NET_VERSION` 3: the last fall pushes an 'over' into
-  every seat's game, so every device ends together.
+  every seat's game, so every device ends together. `NET_VERSION` 4 offsets
+  a star's x on the wire as its y already was: a drifting star can sway past
+  x = 0, and unsigned it showed up on the far right of a guest's sky.
 - **A guest sends one bit**: whether its button is down, with a sequence
   number, 60 times a second. It cannot claim a position, a star or a score.
 - **Joining late is the game's own rule.** A seat taken mid-run gets a comet

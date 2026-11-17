@@ -33,8 +33,9 @@
 import { SEATS } from '../sim.js';
 
 // 1 since 2026-11-11, the first online build. 2: the race (a longer head).
-// 3: one life (one more byte, and a roster `race` of 0, 1 or 2).
-export const NET_VERSION = 3;
+// 3: one life (one more byte, and a roster `race` of 0, 1 or 2). 4: a star's
+// x is offset like its y, because a drifting star can cross x = 0.
+export const NET_VERSION = 4;
 
 export const MSG = Object.freeze({
   HELLO: 'hello',
@@ -56,7 +57,9 @@ const HEAD = 43;
 const NO_RACE = 0xffff;
 const COMET = 19;
 const NONE = 255;
-// Stars and dust: x and (y - camY + 400) in sixteenths of a unit, as u16.
+// Stars and dust: (x + 400) and (y - camY + 400) in sixteenths of a unit, as
+// u16. A star that drifts sways past the wall (sim.js amp), so x can go below
+// 0, and unsigned it wrapped to the far right of a guest's sky (≈ 4091).
 const Q = 16;
 const LOW = 400;
 
@@ -99,7 +102,7 @@ export function packFrame(g, frameNo) {
     v.setUint8(o + 18, li < 0 ? NONE : li);
   }
   for (const s of stars) {
-    v.setUint16(o, s.x * Q);
+    v.setUint16(o, (s.x + LOW) * Q);
     v.setUint16(o + 2, Math.max(0, (s.y - g.camY + LOW) * Q));
     v.setUint8(o + 4, (s.dark ? 1 : 0) | (s.lit ? 2 : 0));
     o += 5;
@@ -141,7 +144,7 @@ export function unpackFrame(bytes) {
   let o = HEAD + SEATS * COMET;
   for (let i = 0; i < nStars; i++, o += 5) {
     const f = v.getUint8(o + 4);
-    g.stars.push({ x: v.getUint16(o) / Q, y: v.getUint16(o + 2) / Q + g.camY - LOW, dark: !!(f & 1), lit: !!(f & 2) });
+    g.stars.push({ x: v.getUint16(o) / Q - LOW, y: v.getUint16(o + 2) / Q + g.camY - LOW, dark: !!(f & 1), lit: !!(f & 2) });
   }
   for (let i = 0; i < nDust; i++, o += 4) {
     g.dust.push({ x: v.getUint16(o) / Q, y: v.getUint16(o + 2) / Q + g.camY - LOW, taken: false });

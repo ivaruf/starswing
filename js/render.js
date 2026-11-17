@@ -48,6 +48,8 @@ export const SEAT_CSS = PC.map((i) => ACCENT[i]);
 const GOLD = [255, 214, 120];
 const RED = [255, 70, 90];
 const FONT = 'ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+// Asked for less motion: no shake. Read live, so the setting can change mid-run.
+const calm = globalThis.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
 function disc(c, core = 0.12, rays = false) {
   const cv = document.createElement('canvas');
@@ -276,7 +278,7 @@ export function createRenderer(canvas) {
     }
 
     if (shake > 0) {
-      shake -= dt;
+      shake = calm.matches ? 0 : shake - dt;
       ctx.translate((Math.random() - 0.5) * 24 * shake, (Math.random() - 0.5) * 24 * shake);
     }
 

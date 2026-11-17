@@ -105,7 +105,7 @@ export function createGame({ w = 600, view = 900, seats = [true], seed = 0, resp
         status: on ? 'parked' : 'none',
         x: first.x + 90 * Math.cos(ang), y: first.y + 90 * Math.sin(ang), vx: 0, vy: 0,
         tether: on ? first : null, last: null,
-        r: 90, rT: 90, ang, dir: 1, speed: SWING, chain: 0, wait: 0,
+        r: 90, rT: 90, ang, dir: 1, speed: SWING, chain: 0, wait: 0, flew: false,
       };
     }),
     stars: [first], // bright and dark together, in rising order
@@ -257,7 +257,10 @@ export function step(g, dt, holds) {
       } else if ((c.wait -= dt) <= 0) rejoin(g, c, who);
       continue;
     }
-    if (c.status === 'parked' && hold) c.status = 'play';
+    if (c.status === 'parked' && hold) {
+      c.status = 'play';
+      c.flew = true;
+    }
 
     if (c.tether && c.status === 'play' && !hold) {
       c.last = c.tether;
@@ -426,7 +429,10 @@ export function stepRace(r, dt, holds) {
     }
     r.info.metres[i] = metres(g);
   }
-  if (fell && !r.games.some((g) => g.status !== 'over' && g.comets[0].status !== 'none')) {
+  // A seat still circling the first star when everyone who flew has fallen is
+  // done at 0 m: parked, nothing can push it out, and it would hold the end
+  // card back for ever (a guest who never touched the screen).
+  if (fell && !r.games.some((g) => g.status !== 'over' && g.comets[0].status !== 'none' && g.comets[0].flew)) {
     end = true;
     r.games.forEach((g, i) => {
       g.status = 'over';
