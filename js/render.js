@@ -9,8 +9,8 @@
  * edge when it is close, and the HUD: points top left, clear of the three
  * corner plates top right.
  *
- * FLOW. A streak of new stars plays audio.js's TUNE, a note a catch; the sky
- * marks its phrases with wider rings, its last note with a gold bloom, and a
+ * FLOW. A streak of new stars plays one of audio.js's tunes, a note a catch;
+ * the sky marks its phrases with wider rings, its last note with a gold bloom, and a
  * comet that has played it all wears a gold tail until the streak breaks.
  *
  * `shape()` picks the sim's field for this screen (sim.js header); a run
@@ -41,7 +41,7 @@
 
 import { ZONE, RACE, score, metres, target } from './sim.js';
 import { t } from './i18n.js';
-import { TUNE } from './audio.js';
+import { TUNE_LENGTH } from './audio.js';
 
 // One accent per zone, cycling: ice, violet, rose, amber, aurora.
 const ZONES = [[90, 200, 255], [170, 130, 255], [255, 110, 190], [255, 190, 90], [110, 255, 170]];
@@ -170,7 +170,7 @@ export function createRenderer(canvas) {
   const tail = new Float32Array(4 * TN * 2);
   const tailI = new Uint8Array(4), tailN = new Uint8Array(4);
   const tgt = [null, null, null, null]; // the star each comet's hold would catch
-  // Each seat's streak, read off its catches: where it is in audio.js's TUNE.
+  // Each seat's streak, read off its catches: where it is in its tune.
   // A streak that has played the whole tune is in flow, and its tail is gold.
   const streak = new Uint16Array(4);
   let shake = 0, banner = 0, bannerN = 0, zoneFade = 1, zonePrev = 0, zoneNow = 0;
@@ -225,9 +225,9 @@ export function createRenderer(canvas) {
       // The tune is heard in fours, so each phrase's last note rings wider,
       // and its very last note blooms gold: the streak has played it all.
       const n = (streak[e.who | 0] = e.fresh ? e.chain : 0);
-      const home = n > 0 && n % TUNE.length === 0;
+      const home = n > 0 && n % TUNE_LENGTH === 0;
       ring(e.x, e.y, home ? 1.4 : n > 0 && n % 4 === 0 ? 0.8 : 0.5, z);
-      spark(e.x, e.y, e.fresh ? 220 : 90, e.fresh ? 16 : 5, n >= TUNE.length ? -1 : z);
+      spark(e.x, e.y, e.fresh ? 220 : 90, e.fresh ? 16 : 5, n >= TUNE_LENGTH ? -1 : z);
       if (home) spark(e.x, e.y, 420, 40, -1, 1.1);
     } else if (e.type === 'release') spark(e.x, e.y, 120, 5, -2, 0.4);
     else if (e.type === 'dust') spark(e.x, e.y, 150, 7, -1, 0.5);
@@ -411,7 +411,7 @@ export function createRenderer(canvas) {
       tailI[i] = (tailI[i] + 1) % TN;
       if (tailN[i] < TN) tailN[i]++;
       ctx.lineCap = 'butt'; // round caps overlap additively and bead the tail
-      if (streak[i] >= TUNE.length) ctx.strokeStyle = GOLD_CSS;
+      if (streak[i] >= TUNE_LENGTH) ctx.strokeStyle = GOLD_CSS;
       for (let j = 1; j < tailN[i]; j++) {
         const a = (tailI[i] - j + TN) % TN, b = (tailI[i] - j - 1 + TN) % TN;
         const f = 1 - j / tailN[i];

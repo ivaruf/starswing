@@ -7,9 +7,10 @@
  * this game). This file only loads and plays them:
  *
  *   grab        a star is caught: a harp string on C4, played at the
- *               playbackRate of the next note of TUNE with every NEW star in
- *               a row, so a streak plays a melody over the loop (which is in
- *               C). One file and a rate, not sixteen files (hub §9). From
+ *               playbackRate of the next note of a melody (TUNES) with every
+ *               NEW star in a row, so a streak plays a tune over the loop
+ *               (which is in C); which tune, the streak's first star decides.
+ *               One file and a rate, not eighty files (hub §9). From
  *               its last note on, while the streak holds, the bell doubles
  *               it an octave up: that, with render.js's gold tail, is what
  *               flow sounds and looks like. An old star breaks the streak
@@ -54,13 +55,30 @@ const BASE = new URL('../audio/', import.meta.url);
 const NOTES = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 const RATES = NOTES.map((n) => Math.pow(2, n / 12));
 const rate = (i) => RATES[Math.min(i, RATES.length - 1)];
-// The streak's melody, in the same semitones: four phrases of four, and the
-// player's catches are its rhythm, so it must be known by its shape alone. It
-// rises as the old ladder did (a short streak still sounds like a climb),
-// sways, climbs to a high G and comes home down the opening turned over, an
-// octave up. Every note is in the pentatonic, so it fits any bar of the loop.
-export const TUNE = [0, 2, 4, 7, 9, 7, 4, 7, 9, 12, 14, 16, 19, 16, 14, 12];
-const TUNE_RATES = TUNE.map((n) => Math.pow(2, n / 12));
+// The streaks' melodies, in the same semitones. Each is four phrases of four
+// and comes home to C5, so its last note is the arrival render.js blooms on;
+// the player's catches are the rhythm, so each must be known by its shape
+// alone, and no two start alike. Every note is in the pentatonic, so any of
+// them fits any bar of the loop (the assert below holds them to both).
+export const TUNE_LENGTH = 16;
+const TUNES = [
+  [0, 2, 4, 7, 9, 7, 4, 7, 9, 12, 14, 16, 19, 16, 14, 12], // climb: up, a sway, a peak, home down the opening turned over
+  [0, 4, 2, 7, 4, 9, 7, 12, 9, 14, 12, 16, 14, 9, 7, 12], // wave: zigzags up a step at a time
+  [4, 4, 7, 7, 9, 9, 7, 4, 12, 12, 14, 14, 16, 14, 12, 12], // echo: every note twice
+  [12, 9, 7, 4, 7, 4, 2, 0, 2, 4, 7, 9, 12, 16, 14, 12], // fall: from high to low, and back up
+  [0, 12, 7, 9, 4, 16, 12, 14, 7, 19, 16, 14, 12, 9, 7, 12], // leap: an octave up and a step, at three heights
+];
+console.assert(
+  TUNES.every((t) => t.length === TUNE_LENGTH && t.at(-1) === 12 && t.every((n) => [0, 2, 4, 7, 9].includes(((n % 12) + 12) % 12))),
+  'a tune is not 16 notes of C pentatonic ending on C5',
+);
+const TUNE_RATES = TUNES.map((t) => t.map((n) => Math.pow(2, n / 12)));
+const AUDITION = TUNE_RATES.flat();
+// The tune each seat's streak is playing. A streak's first star picks it by
+// where that star is: nobody can see which it will be, and online every
+// screen picks the same one, since an event's numbers cross the wire exact.
+const tuneOf = [0, 0, 0, 0];
+const pick = (e) => Math.floor(Math.abs(e.x * 31 + e.y * 17)) % TUNES.length;
 const BROKEN = Math.pow(2, -5 / 12); // G3, a step that leads home to the tune's C
 
 // Per-cue trims over the authored balance. encode-oneshots keeps the relative
@@ -293,11 +311,11 @@ export const audio = {
     glide(bus === 'sfx' ? sfxBus.gain : musicBus.gain, levels[bus]);
     if (bus === 'sfx') {
       // Throttled on the audio clock, not the sim's, which is held while the
-      // menu is open (hub §2). Each audition is the tune's next note, so a
-      // drag plays the same melody a streak does.
+      // menu is open (hub §2). Each audition is the next note of the tunes, so
+      // a long drag plays every melody a streak can.
       if (ctx.currentTime - lastAudition > 0.12) {
         lastAudition = ctx.currentTime;
-        play('grab', TUNE_RATES[auditionNote++ % TUNE.length]);
+        play('grab', AUDITION[auditionNote++ % AUDITION.length]);
       }
     } else {
       // MUSIC: the loop is stopped while the menu is open, so a drag brings
@@ -325,12 +343,14 @@ export const audio = {
   },
   /* The sim's events, as sound. The end is end()'s, not an event's. */
   event(e) {
+    // Picked even in silence, so a streak unmuted halfway keeps its tune.
+    if (e.type === 'grab' && e.fresh && e.chain === 1) tuneOf[e.who | 0] = pick(e);
     if (!ctx || muted) return;
     if (e.type === 'grab') {
       if (!e.fresh) return play('grab', BROKEN);
-      const r = TUNE_RATES[(e.chain - 1) % TUNE.length];
+      const r = TUNE_RATES[tuneOf[e.who | 0]][(e.chain - 1) % TUNE_LENGTH];
       play('grab', r);
-      if (e.chain >= TUNE.length) play('dust', r); // the bell, an octave up: flow
+      if (e.chain >= TUNE_LENGTH) play('dust', r); // the bell, an octave up: flow
     } else if (e.type === 'dust') play('dust', rate(e.combo));
     else if (e.type === 'release') play('release');
     else if (e.type === 'wall') play('wall');

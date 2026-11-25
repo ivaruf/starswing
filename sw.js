@@ -20,7 +20,7 @@
 // All paths are RELATIVE: the game is served from /<slug>/ and is also framed
 // by the arcade from a sibling directory.
 
-const VERSION = 'v0.5.1'; // a streak plays a melody, and flow turns the tail gold
+const VERSION = 'v0.5.2'; // five melodies, and a streak's first star picks which
 const PREFIX = 'starswing-';
 const CACHE = `${PREFIX}${VERSION}`;
 

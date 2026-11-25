@@ -7,7 +7,7 @@
 // keeps it (one gain for the whole set). Cue i starts at i × SLOT, in the order of ORDER; encode.mjs cuts at the same.
 //
 // Every cue is in C, because js/audio.js plays grab and dust at playback rates in C major pentatonic over a loop in
-// C: grab's root is C4 and dust's C5, so a streak plays its melody (audio.js TUNE) on the harp, and in flow the bells.
+// C: grab's root is C4 and dust's C5, so a streak plays its melody (audio.js TUNES) on the harp, and in flow the bells.
 import { AbsoluteFill, Composition, Mix, registerRoot } from "raea";
 import * as Tone from "raea/tone";
 import { kit } from "./kit.ts";
