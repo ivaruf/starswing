@@ -7,7 +7,7 @@
 // there and the seam does not gap. raea's time 0 is the first sample, so no marker is needed to find it.
 //
 // C major, every chord diatonic, and none that a note of C major pentatonic would fight (no B7, no G7 with its F
-// held against an E), because the melody is not here: it is the player's. Each catch plays the next note of that scale on the harp (cues.tsx), so
+// held against an E), because the melody is not here: it is the player's. Each catch plays the next note of a tune in that scale on the harp (js/audio.js TUNE), so
 // the loop is the sky the tune is played in. The harp's eighths are the pulse to swing against; there are no
 // drums.
 //

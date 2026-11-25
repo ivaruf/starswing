@@ -6,11 +6,14 @@
  * (whose header says how; the owner chose raea over hub §9's Sonic Pi for
  * this game). This file only loads and plays them:
  *
- *   grab        a star is caught: a harp string on C4, played at a
- *               playbackRate that climbs C major pentatonic with every NEW
- *               star in a row, so a good climb plays a rising tune over the
- *               loop (which is in C). One file and a rate, not eleven
- *               files (hub §9). Catching an old star starts again low.
+ *   grab        a star is caught: a harp string on C4, played at the
+ *               playbackRate of the next note of TUNE with every NEW star in
+ *               a row, so a streak plays a melody over the loop (which is in
+ *               C). One file and a rate, not sixteen files (hub §9). From
+ *               its last note on, while the streak holds, the bell doubles
+ *               it an octave up: that, with render.js's gold tail, is what
+ *               flow sounds and looks like. An old star breaks the streak
+ *               with a low G, which leads back into the tune's first C.
  *   release     letting go: a brush of an ocean drum's beads.
  *   dust        stardust: a glockenspiel bell, climbing the same scale
  *               while the pieces keep coming.
@@ -51,6 +54,14 @@ const BASE = new URL('../audio/', import.meta.url);
 const NOTES = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 const RATES = NOTES.map((n) => Math.pow(2, n / 12));
 const rate = (i) => RATES[Math.min(i, RATES.length - 1)];
+// The streak's melody, in the same semitones: four phrases of four, and the
+// player's catches are its rhythm, so it must be known by its shape alone. It
+// rises as the old ladder did (a short streak still sounds like a climb),
+// sways, climbs to a high G and comes home down the opening turned over, an
+// octave up. Every note is in the pentatonic, so it fits any bar of the loop.
+export const TUNE = [0, 2, 4, 7, 9, 7, 4, 7, 9, 12, 14, 16, 19, 16, 14, 12];
+const TUNE_RATES = TUNE.map((n) => Math.pow(2, n / 12));
+const BROKEN = Math.pow(2, -5 / 12); // G3, a step that leads home to the tune's C
 
 // Per-cue trims over the authored balance. encode-oneshots keeps the relative
 // loudness set by `amp:` in the pieces, so these stay near 1 on purpose.
@@ -282,11 +293,11 @@ export const audio = {
     glide(bus === 'sfx' ? sfxBus.gain : musicBus.gain, levels[bus]);
     if (bus === 'sfx') {
       // Throttled on the audio clock, not the sim's, which is held while the
-      // menu is open (hub §2). Each audition walks up the scale, so a drag
-      // plays the same little tune a good climb does.
+      // menu is open (hub §2). Each audition is the tune's next note, so a
+      // drag plays the same melody a streak does.
       if (ctx.currentTime - lastAudition > 0.12) {
         lastAudition = ctx.currentTime;
-        play('grab', RATES[auditionNote++ % RATES.length]);
+        play('grab', TUNE_RATES[auditionNote++ % TUNE.length]);
       }
     } else {
       // MUSIC: the loop is stopped while the menu is open, so a drag brings
@@ -315,8 +326,12 @@ export const audio = {
   /* The sim's events, as sound. The end is end()'s, not an event's. */
   event(e) {
     if (!ctx || muted) return;
-    if (e.type === 'grab') play('grab', rate(e.fresh ? e.chain - 1 : 0));
-    else if (e.type === 'dust') play('dust', rate(e.combo));
+    if (e.type === 'grab') {
+      if (!e.fresh) return play('grab', BROKEN);
+      const r = TUNE_RATES[(e.chain - 1) % TUNE.length];
+      play('grab', r);
+      if (e.chain >= TUNE.length) play('dust', r); // the bell, an octave up: flow
+    } else if (e.type === 'dust') play('dust', rate(e.combo));
     else if (e.type === 'release') play('release');
     else if (e.type === 'wall') play('wall');
     // With friends: a comet lost falls like the end does, one back is a catch.
