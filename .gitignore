@@ -1,0 +1,3 @@
+# raea: the fetched samples and the renders (tools/audio/build.sh makes both again)
+tools/audio/media/
+tools/audio/out/

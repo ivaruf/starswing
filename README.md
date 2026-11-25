@@ -96,8 +96,17 @@ race, `?life` for one life). It is something to look at, not an assertion.
 
 ## Sound
 
-The pieces in `tools/audio/*.rb` are the source of truth; `audio/*.m4a` are
-outputs. The header of `tools/audio/encode.mjs` says how to re-render.
+Recorded instruments, played by [raea](https://raea.io): a concert harp,
+glockenspiel, vibraphone, hand chimes, wine glasses, a mark tree, a slit drum
+and an ocean drum, all from the Versilian Community Sample Library (CC0).
+`tools/audio/cues.tsx` (the seven cues) and `tools/audio/music-sky.tsx` (the
+loop) are the source of truth; `audio/*.m4a` are outputs:
+
+```sh
+sh tools/audio/build.sh   # fetches the samples once, renders with raea, encodes into audio/
+```
+
+Its header and `tools/audio/encode.mjs`'s say what each step does and why.
 
 ## Storage
 

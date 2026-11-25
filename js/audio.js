@@ -1,24 +1,26 @@
 /*
  * audio.js — the two buses, the mute, the composed cues and the play loop.
  *
- * Every sound is a Sonic Pi piece in tools/audio/*.rb, rendered by the hub's
- * render.rb and cut by tools/audio/encode.mjs into audio/*.m4a (hub §9; the
- * header of encode.mjs says how to re-render). This file only loads and plays
- * them:
+ * Every sound is recorded instruments played by raea: tools/audio/cues.tsx
+ * and music-sky.tsx, rendered and cut into audio/*.m4a by tools/audio/build.sh
+ * (whose header says how; the owner chose raea over hub §9's Sonic Pi for
+ * this game). This file only loads and plays them:
  *
- *   grab        a star is caught: one plucked note, C4, played at a
+ *   grab        a star is caught: a harp string on C4, played at a
  *               playbackRate that climbs C major pentatonic with every NEW
  *               star in a row, so a good climb plays a rising tune over the
  *               loop (which is in C). One file and a rate, not eleven
- *               oscillators (hub §9). Catching an old star starts again low.
- *   release     letting go: a short breath of air.
- *   dust        stardust: a tiny bell, climbing the same scale while the
- *               pieces keep coming.
- *   wall        the comet glances off the edge of the field.
- *   zone        250 m more: a rising shimmer. The music ducks under it.
- *   over        the comet is lost: a gentle falling line, not a buzzer.
+ *               files (hub §9). Catching an old star starts again low.
+ *   release     letting go: a brush of an ocean drum's beads.
+ *   dust        stardust: a glockenspiel bell, climbing the same scale
+ *               while the pieces keep coming.
+ *   wall        the comet glances off the edge of the field: a slit drum.
+ *   zone        250 m more: a mark tree and a harp sweep up onto chimes.
+ *               The music ducks under it.
+ *   over        the comet is lost: a gentle falling harp line, not a buzzer.
  *   best        ... or, when the run was a new record, a small fanfare.
- *   music-sky   a 32 s loop on the MUSIC bus while a run is on.
+ *   music-sky   a 32 s loop on the MUSIC bus while a run is on: harp,
+ *               vibraphone, glockenspiel and a wine glass.
  *
  * The graph is   source → per-cue gain → sfxBus ┐
  *                source → track gain → duck → musicBus ┴→ master → out

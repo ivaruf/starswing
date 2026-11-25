@@ -20,7 +20,7 @@
 // All paths are RELATIVE: the game is served from /<slug>/ and is also framed
 // by the arcade from a sibling directory.
 
-const VERSION = 'v0.4.2'; // one life ends when the last flyer falls, a hidden tab lets go online, the way out offline, calmer shake
+const VERSION = 'v0.5.0'; // new sound: harp, bells, vibraphone and glass, played by raea
 const PREFIX = 'starswing-';
 const CACHE = `${PREFIX}${VERSION}`;
 
